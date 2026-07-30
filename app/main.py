@@ -76,6 +76,7 @@ async def ensure_db_initialized():
                 await conn.run_sync(Base.metadata.create_all)
             await auto_seed_if_empty()
             _db_initialized = True
+            print("DB and Seed initialized successfully.")
         except Exception as e:
             print(f"Error initializing DB in serverless: {e}")
 
