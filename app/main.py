@@ -66,11 +66,22 @@ async def auto_seed_if_empty():
         print(f"Auto-seed warning: {e}")
 
 
+_db_initialized = False
+
+async def ensure_db_initialized():
+    global _db_initialized
+    if not _db_initialized:
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            await auto_seed_if_empty()
+            _db_initialized = True
+        except Exception as e:
+            print(f"Error initializing DB in serverless: {e}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    await auto_seed_if_empty()
+    await ensure_db_initialized()
     yield
 
 
@@ -89,6 +100,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def db_init_middleware(request: Request, call_next):
+    await ensure_db_initialized()
+    response = await call_next(request)
+    return response
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
