@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
 from app.config import settings
@@ -101,9 +100,8 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Mount Uploads directory
-os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+# Vercel serverless handles static files differently; uploads are typically served via cloud storage in prod.
+# Local uploads directory creation is skipped for Vercel deployment.
 
 # Mount all domain routers
 app.include_router(auth.router)
