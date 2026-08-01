@@ -20,45 +20,45 @@ from app.routers import (
 async def auto_seed_if_empty():
     try:
         async with AsyncSessionLocal() as session:
-            res_admin = await session.execute(select(User).where(User.email == "khannayash394@gmail.com"))
+            res_admin = await session.execute(select(User).where(User.email == "admin@geeta.edu.in"))
             admin = res_admin.scalar_one_or_none()
             if not admin:
                 admin = User(
-                    name="Admin Yash", email="khannayash394@gmail.com",
+                    name="Admin Yash", email="admin@geeta.edu.in",
                     phone="+91 98765 43210", role=UserRole.super_admin,
-                    password_hash=get_password_hash("Y1a2s3h4"), must_change_password=False
+                    password_hash=get_password_hash("admin123"), must_change_password=False
                 )
                 session.add(admin)
             else:
-                admin.password_hash = get_password_hash("Y1a2s3h4")
+                admin.password_hash = get_password_hash("admin123")
 
-            res_fac = await session.execute(select(User).where(User.email == "khannayash395@gmail.com"))
+            res_fac = await session.execute(select(User).where(User.email == "faculty@geeta.edu.in"))
             fac = res_fac.scalar_one_or_none()
             if not fac:
                 fac = User(
-                    name="Faculty Yash", email="khannayash395@gmail.com",
+                    name="Faculty Yash", email="faculty@geeta.edu.in",
                     phone="+91 98123 45678", department="Computer Science & Engineering",
                     designation="Associate Professor", employee_id="GU-CSE-042",
-                    role=UserRole.faculty, password_hash=get_password_hash("Y1a2s3h4"),
+                    role=UserRole.faculty, password_hash=get_password_hash("faculty123"),
                     must_change_password=False
                 )
                 session.add(fac)
             else:
-                fac.password_hash = get_password_hash("Y1a2s3h4")
+                fac.password_hash = get_password_hash("faculty123")
 
-            res_stu = await session.execute(select(User).where(User.email == "student@dsw.edu.in"))
+            res_stu = await session.execute(select(User).where(User.email == "student@geeta.edu.in"))
             stu = res_stu.scalar_one_or_none()
             if not stu:
                 stu = User(
-                    name="Student Yash", email="student@dsw.edu.in",
+                    name="Student Yash", email="student@geeta.edu.in",
                     phone="+91 99887 76655", roll_number="GU2026001",
                     course_branch="B.Tech CSE", year="3rd Year",
-                    role=UserRole.student, password_hash=get_password_hash("Y1a2s3h4"),
+                    role=UserRole.student, password_hash=get_password_hash("student123"),
                     must_change_password=False
                 )
                 session.add(stu)
             else:
-                stu.password_hash = get_password_hash("Y1a2s3h4")
+                stu.password_hash = get_password_hash("student123")
 
             await session.commit()
             print("Auto-seeded & synchronized demo accounts successfully!")

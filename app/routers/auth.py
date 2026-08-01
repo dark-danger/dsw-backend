@@ -79,9 +79,9 @@ async def logout():
 @router.get("/seed-demo")
 async def seed_demo_accounts(db: AsyncSession = Depends(get_db)):
     accounts = [
-        ("khannayash394@gmail.com", "Admin Yash", UserRole.super_admin, "Y1a2s3h4"),
-        ("khannayash395@gmail.com", "Faculty Yash", UserRole.faculty, "Y1a2s3h4"),
-        ("student@dsw.edu.in", "Student Yash", UserRole.student, "Y1a2s3h4")
+        ("admin@geeta.edu.in", "Admin Yash", UserRole.super_admin, "admin123"),
+        ("faculty@geeta.edu.in", "Faculty Yash", UserRole.faculty, "faculty123"),
+        ("student@geeta.edu.in", "Student Yash", UserRole.student, "student123")
     ]
     created_or_updated = []
     for email, name, role, plain_pass in accounts:
