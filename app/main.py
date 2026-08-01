@@ -81,18 +81,12 @@ async def ensure_db_initialized():
             print("DB and Seed initialized successfully.")
         except Exception as e:
             print(f"Error initializing DB in serverless: {e}")
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await ensure_db_initialized()
-    yield
-
+            raise e
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Full-stack portal for Dean of Student Welfare (DSW) Geeta University",
     version="1.0.0",
-    lifespan=lifespan
 )
 
 app.add_middleware(
