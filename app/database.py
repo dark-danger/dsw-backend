@@ -17,7 +17,10 @@ if db_url.startswith("postgres://"):
 elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+"):
     db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-connect_args = {}
+connect_args = {
+    "timeout": 5.0,
+    "command_timeout": 5.0
+}
 
 if db_url.startswith("postgresql+asyncpg"):
     # asyncpg does NOT accept sslmode/channel_binding as query params
