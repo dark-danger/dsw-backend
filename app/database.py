@@ -35,6 +35,9 @@ if db_url.startswith("postgresql+asyncpg"):
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = _ssl.CERT_NONE
     connect_args["ssl"] = ssl_ctx
+    # Supabase Supavisor (Transaction Pooler port 6543) does NOT support
+    # prepared statements. Disabling cache prevents "database does not exist" errors.
+    connect_args["statement_cache_size"] = 0
 
 elif db_url.startswith("sqlite"):
     connect_args["check_same_thread"] = False
