@@ -1,9 +1,15 @@
 import re
+import ssl as _ssl
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from app.config import settings
 
 db_url = settings.DATABASE_URL
+
+if not db_url:
+    # Provide a dummy URL just to allow the module to load without throwing an ArgumentError.
+    # The middleware will catch the missing URL and throw a proper HTTP 500 error.
+    db_url = "sqlite+aiosqlite:///:memory:"
 
 # Convert postgres:// or postgresql:// to postgresql+asyncpg://
 if db_url.startswith("postgres://"):
@@ -15,18 +21,22 @@ connect_args = {}
 
 if db_url.startswith("postgresql+asyncpg"):
     # asyncpg does NOT accept sslmode/channel_binding as query params
-    # Strip them out and pass ssl=True via connect_args instead
-    has_ssl = "sslmode=require" in db_url or "sslmode=prefer" in db_url
-    db_url = re.sub(r'[&?]sslmode=[^&]*', '', db_url)
-    db_url = re.sub(r'[&?]channel_binding=[^&]*', '', db_url)
+    # Strip them out and pass ssl via connect_args instead
+    db_url = re.sub(r'[\&?]sslmode=[^\&]*', '', db_url)
+    db_url = re.sub(r'[\&?]channel_binding=[^\&]*', '', db_url)
     # Clean any trailing ? or & left over
     db_url = re.sub(r'\?$', '', db_url)
-    db_url = re.sub(r'&$', '', db_url)
-    if has_ssl:
-        connect_args["ssl"] = True
+    db_url = re.sub(r'\&$', '', db_url)
+    # Always use SSL for Supabase/external PostgreSQL
+    ssl_ctx = _ssl.create_default_context()
+    ssl_ctx.check_hostname = False
+    ssl_ctx.verify_mode = _ssl.CERT_NONE
+    connect_args["ssl"] = ssl_ctx
 
 elif db_url.startswith("sqlite"):
     connect_args["check_same_thread"] = False
+
+print(f"[DB] Using: {db_url[:40]}...")
 
 engine = create_async_engine(
     db_url,

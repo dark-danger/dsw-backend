@@ -69,6 +69,8 @@ async def auto_seed_if_empty():
 _db_initialized = False
 
 async def ensure_db_initialized():
+    if not settings.DATABASE_URL:
+        raise RuntimeError("CRITICAL ERROR: Supabase DATABASE_URL is missing in Vercel environment variables. You must set it to prevent data loss.")
     global _db_initialized
     if not _db_initialized:
         try:
@@ -104,7 +106,18 @@ app.add_middleware(
 
 @app.middleware("http")
 async def db_init_middleware(request: Request, call_next):
-    await ensure_db_initialized()
+    if request.method == "OPTIONS":
+        # Preflight requests should bypass DB initialization to avoid CORS errors if DB is down or unconfigured
+        return await call_next(request)
+        
+    try:
+        await ensure_db_initialized()
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": str(e), "error_type": "DatabaseConfigurationError"},
+            headers={"Access-Control-Allow-Origin": "*"}
+        )
     response = await call_next(request)
     return response
 

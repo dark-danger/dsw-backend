@@ -6,7 +6,8 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "DSW Geeta University Portal API"
     ENV: str = "development"
     # Enforce Supabase PostgreSQL connection. SQLite in /tmp causes data loss on serverless cold starts.
-    DATABASE_URL: str
+    # We default to empty string so it doesn't crash on import, allowing graceful error handling.
+    DATABASE_URL: str = os.getenv("DATABASE_URL") or os.getenv("SUPABASE_URL", "")
     JWT_SECRET: str = "geeta-university-dsw-super-secret-key-2026"
     JWT_REFRESH_SECRET: str = "geeta-university-dsw-refresh-secret-key-2026"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
