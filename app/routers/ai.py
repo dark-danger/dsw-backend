@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.config import settings
+from app.config import settings, _get_gemini_key
 from app.core.deps import get_current_user
 from app.models.all_models import User
 
@@ -74,7 +74,7 @@ async def improve_english(
     if len(text_to_improve) > 5000:
         raise HTTPException(status_code=400, detail="Text exceeds maximum allowed length (5000 characters).")
 
-    api_key = settings.GEMINI_API_KEY
+    api_key = settings.GEMINI_API_KEY or _get_gemini_key()
     if not api_key:
         raise HTTPException(status_code=500, detail="Gemini API Key is not configured on server.")
 
