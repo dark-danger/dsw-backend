@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 
 from fastapi.staticfiles import StaticFiles
 
@@ -17,6 +17,33 @@ from app.routers import (
     event_reports, events, feedback, forms, leaderboard_staff, leaderboard_student,
     notifications, queries, tasks, uploads, users,
 )
+
+
+async def apply_safe_migrations(conn):
+    """
+    Applies idempotent column additions to existing tables (ALTER TABLE ... ADD COLUMN IF NOT EXISTS).
+    Ensures that existing databases seamlessly acquire new feature columns without table drops.
+    """
+    migration_statements = [
+        # dynamic_forms table columns
+        "ALTER TABLE dynamic_forms ADD COLUMN IF NOT EXISTS google_sheet_url VARCHAR(500);",
+        "ALTER TABLE dynamic_forms ADD COLUMN IF NOT EXISTS google_webhook_url VARCHAR(500);",
+        "ALTER TABLE dynamic_forms ADD COLUMN IF NOT EXISTS enable_image_upload BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE dynamic_forms ADD COLUMN IF NOT EXISTS image_upload_label VARCHAR(200) DEFAULT 'Upload Document / Photo';",
+        "ALTER TABLE dynamic_forms ADD COLUMN IF NOT EXISTS image_upload_required BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE dynamic_forms ADD COLUMN IF NOT EXISTS enable_payment BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE dynamic_forms ADD COLUMN IF NOT EXISTS payment_amount DOUBLE PRECISION DEFAULT 0.0;",
+        "ALTER TABLE dynamic_forms ADD COLUMN IF NOT EXISTS upi_id VARCHAR(100);",
+        "ALTER TABLE dynamic_forms ADD COLUMN IF NOT EXISTS upi_payee_name VARCHAR(200);",
+        # other table column verifications
+        "ALTER TABLE events ADD COLUMN IF NOT EXISTS event_type VARCHAR(50) DEFAULT 'Seminar';",
+        "ALTER TABLE events ADD COLUMN IF NOT EXISTS venue VARCHAR(200);",
+    ]
+    for stmt in migration_statements:
+        try:
+            await conn.execute(text(stmt))
+        except Exception as e:
+            print(f"Migration note ({stmt}): {e}")
 
 
 async def auto_seed_if_empty():
@@ -69,6 +96,7 @@ async def ensure_db_initialized():
         try:
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
+                await apply_safe_migrations(conn)
             await auto_seed_if_empty()
             _db_initialized = True
             print("DB and Seed initialized successfully.")
