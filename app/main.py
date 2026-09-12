@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from sqlalchemy import select, func
 
 from app.config import settings
@@ -11,78 +11,48 @@ from app.core.security import get_password_hash
 from app.database import AsyncSessionLocal, Base, engine
 from app.models.all_models import User, UserRole
 from app.routers import (
-    announcements, auth, clubs, committees, dashboard, duty_charts,
+    announcements, auth, committees, dashboard, duty_charts,
     events, feedback, forms, leaderboard_staff, leaderboard_student,
     notifications, queries, tasks, uploads, users,
 )
 
 
-
 async def auto_seed_if_empty():
     try:
         async with AsyncSessionLocal() as session:
-            # 1. Admin
-            admin_res = await session.execute(select(User).where(func.lower(User.email) == "admin@geeta.edu.in"))
-            admin = admin_res.scalar_one_or_none()
-            if not admin:
-                admin = User(
-                    name="Admin Yash",
-                    email="admin@geeta.edu.in",
-                    phone="+91 98765 43210",
-                    role=UserRole.super_admin,
-                    password_hash=get_password_hash("admin123"),
-                    must_change_password=False,
-                    is_active=True
-                )
-                session.add(admin)
-            else:
-                admin.password_hash = get_password_hash("admin123")
-                admin.is_active = True
+            # Fast single count check — if users exist, exit immediately with 0 bcrypt overhead
+            cnt_res = await session.execute(select(func.count(User.id)))
+            user_count = cnt_res.scalar_one()
+            if user_count > 0:
+                return
 
-            # 2. Faculty
-            fac_res = await session.execute(select(User).where(func.lower(User.email) == "faculty@geeta.edu.in"))
-            fac = fac_res.scalar_one_or_none()
-            if not fac:
-                fac = User(
-                    name="Faculty Yash",
-                    email="faculty@geeta.edu.in",
-                    phone="+91 98123 45678",
-                    department="Computer Science & Engineering",
-                    designation="Associate Professor",
-                    employee_id="GU-CSE-042",
-                    role=UserRole.faculty,
-                    password_hash=get_password_hash("faculty123"),
-                    must_change_password=False,
-                    is_active=True
-                )
-                session.add(fac)
-            else:
-                fac.password_hash = get_password_hash("faculty123")
-                fac.is_active = True
+            admin = User(
+                name="Admin Yash", email="admin@geeta.edu.in",
+                phone="+91 98765 43210", role=UserRole.super_admin,
+                password_hash=get_password_hash("admin123"), must_change_password=False
+            )
+            session.add(admin)
 
-            # 3. Student
-            stu_res = await session.execute(select(User).where(func.lower(User.email) == "student@geeta.edu.in"))
-            stu = stu_res.scalar_one_or_none()
-            if not stu:
-                stu = User(
-                    name="Student Yash",
-                    email="student@geeta.edu.in",
-                    phone="+91 99887 76655",
-                    roll_number="GU2026001",
-                    course_branch="B.Tech CSE",
-                    year="3rd Year",
-                    role=UserRole.student,
-                    password_hash=get_password_hash("student123"),
-                    must_change_password=False,
-                    is_active=True
-                )
-                session.add(stu)
-            else:
-                stu.password_hash = get_password_hash("student123")
-                stu.is_active = True
+            fac = User(
+                name="Faculty Yash", email="faculty@geeta.edu.in",
+                phone="+91 98123 45678", department="Computer Science & Engineering",
+                designation="Associate Professor", employee_id="GU-CSE-042",
+                role=UserRole.faculty, password_hash=get_password_hash("faculty123"),
+                must_change_password=False
+            )
+            session.add(fac)
+
+            stu = User(
+                name="Student Yash", email="student@geeta.edu.in",
+                phone="+91 99887 76655", roll_number="GU2026001",
+                course_branch="B.Tech CSE", year="3rd Year",
+                role=UserRole.student, password_hash=get_password_hash("student123"),
+                must_change_password=False
+            )
+            session.add(stu)
 
             await session.commit()
-            print("Auto-seeded and verified demo accounts successfully!")
+            print("Auto-seeded demo accounts successfully!")
     except Exception as e:
         print(f"Auto-seed warning: {e}")
 
@@ -90,6 +60,8 @@ async def auto_seed_if_empty():
 _db_initialized = False
 
 async def ensure_db_initialized():
+    if not settings.DATABASE_URL:
+        raise RuntimeError("CRITICAL ERROR: Supabase DATABASE_URL is missing in Vercel environment variables. You must set it to prevent data loss.")
     global _db_initialized
     if not _db_initialized:
         try:
@@ -119,61 +91,28 @@ app.add_middleware(
 
 @app.middleware("http")
 async def db_init_middleware(request: Request, call_next):
-    # Preflight requests immediately return 200 OK with full CORS headers
-    if request.method == "OPTIONS":
-        return Response(
-            status_code=200,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Max-Age": "86400",
-            }
-        )
+    # Preflight requests and lightweight health/docs routes bypass DB initialization for maximum speed
+    if request.method == "OPTIONS" or request.url.path in ["/", "/health", "/docs", "/openapi.json"]:
+        return await call_next(request)
         
-    if request.url.path in ["/", "/health", "/docs", "/openapi.json"]:
-        response = await call_next(request)
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        return response
-
     try:
         await ensure_db_initialized()
     except Exception as e:
-        import traceback
         return JSONResponse(
             status_code=500,
-            content={
-                "detail": f"Database initialization failed: {str(e)}",
-                "error_type": type(e).__name__,
-                "traceback": traceback.format_exc()
-            },
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-                "Access-Control-Allow-Headers": "*"
-            }
+            content={"detail": str(e), "error_type": "DatabaseConfigurationError"},
+            headers={"Access-Control-Allow-Origin": "*"}
         )
-        
     response = await call_next(request)
-    response.headers["Access-Control-Allow-Origin"] = "*"
     return response
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    import traceback
     print(f"Global Exception: {exc}")
     return JSONResponse(
         status_code=500,
-        content={
-            "detail": str(exc),
-            "error_type": type(exc).__name__,
-            "traceback": traceback.format_exc()
-        },
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "*",
-            "Access-Control-Allow-Headers": "*"
-        }
+        content={"detail": str(exc), "error_type": type(exc).__name__},
+        headers={"Access-Control-Allow-Origin": "*"}
     )
 
 
@@ -193,8 +132,6 @@ app.include_router(notifications.router)
 app.include_router(uploads.router)
 app.include_router(duty_charts.router)
 app.include_router(committees.router)
-app.include_router(clubs.router)
-
 
 
 @app.get("/health")

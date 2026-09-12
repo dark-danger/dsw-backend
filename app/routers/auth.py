@@ -10,61 +10,34 @@ from app.config import settings
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
-@router.get("/debug")
-async def auth_debug(db: AsyncSession = Depends(get_db)):
-    try:
-        user_res = await db.execute(select(User.id, User.email, User.role, User.is_active))
-        users = user_res.all()
-        return {
-            "status": "ok",
-            "users": [{"id": u[0], "email": u[1], "role": str(u[2]), "is_active": u[3]} for u in users]
-        }
-    except Exception as e:
-        import traceback
-        return {
-            "status": "error",
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }
-
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
-    try:
-        clean_email = payload.email.strip().lower()
-        clean_pass = payload.password.strip()
-        
-        result = await db.execute(select(User).where(func.lower(User.email) == clean_email))
-        user = result.scalar_one_or_none()
-        
-        if not user or not verify_password(clean_pass, user.password_hash):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect email or password"
-            )
-        
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Account is disabled"
-            )
-
-        access_token = create_access_token(subject=user.id, role=user.role.value if hasattr(user.role, 'value') else str(user.role))
-        refresh_token = create_refresh_token(subject=user.id, role=user.role.value if hasattr(user.role, 'value') else str(user.role))
-
-        return TokenResponse(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            user=UserOut.model_validate(user)
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
+    clean_email = payload.email.strip().lower()
+    clean_pass = payload.password.strip()
+    
+    result = await db.execute(select(User).where(func.lower(User.email) == clean_email))
+    user = result.scalar_one_or_none()
+    
+    if not user or not verify_password(clean_pass, user.password_hash):
         raise HTTPException(
-            status_code=500,
-            detail=f"Login Error: {str(e)}"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password"
         )
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled"
+        )
+
+    access_token = create_access_token(subject=user.id, role=user.role.value)
+    refresh_token = create_refresh_token(subject=user.id, role=user.role.value)
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user=UserOut.model_validate(user)
+    )
 
 @router.post("/refresh")
 async def refresh_token_endpoint(refresh_token: str, db: AsyncSession = Depends(get_db)):

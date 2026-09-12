@@ -133,7 +133,6 @@ async def delete_event(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
         
-    await log_audit(db, action="DELETE_EVENT", entity_type="event", actor_id=current_user.id, entity_id=event.id, meta={"title": event.title})
     await db.delete(event)
     await db.commit()
     return {"message": "Event deleted successfully"}

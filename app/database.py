@@ -1,4 +1,3 @@
-import os
 import re
 import ssl as _ssl
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -8,9 +7,9 @@ from app.config import settings
 db_url = settings.DATABASE_URL
 
 if not db_url:
-    # Use a persistent SQLite file shared by all async sessions
-    db_path = "/tmp/dsw_portal.db" if os.path.exists("/tmp") else os.path.abspath("dsw_portal.db")
-    db_url = f"sqlite+aiosqlite:///{db_path}"
+    # Provide a dummy URL just to allow the module to load without throwing an ArgumentError.
+    # The middleware will catch the missing URL and throw a proper HTTP 500 error.
+    db_url = "sqlite+aiosqlite:///:memory:"
 
 # Convert postgres:// or postgresql:// to postgresql+asyncpg://
 if db_url.startswith("postgres://"):
@@ -18,12 +17,12 @@ if db_url.startswith("postgres://"):
 elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+"):
     db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
+connect_args = {
+    "timeout": 5.0,
+    "command_timeout": 5.0
+}
+
 if db_url.startswith("postgresql+asyncpg"):
-    connect_args = {
-        "timeout": 10.0,
-        "command_timeout": 10.0,
-        "statement_cache_size": 0
-    }
     # asyncpg does NOT accept sslmode/channel_binding as query params
     # Strip them out and pass ssl via connect_args instead
     db_url = re.sub(r'[\&?]sslmode=[^\&]*', '', db_url)
@@ -36,13 +35,12 @@ if db_url.startswith("postgresql+asyncpg"):
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = _ssl.CERT_NONE
     connect_args["ssl"] = ssl_ctx
+    # Supabase Supavisor (Transaction Pooler port 6543) does NOT support
+    # prepared statements. Disabling cache prevents "database does not exist" errors.
+    connect_args["statement_cache_size"] = 0
 
 elif db_url.startswith("sqlite"):
-    connect_args = {
-        "check_same_thread": False
-    }
-else:
-    connect_args = {}
+    connect_args["check_same_thread"] = False
 
 print(f"[DB] Using: {db_url[:40]}...")
 
