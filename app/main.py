@@ -14,7 +14,7 @@ from app.database import AsyncSessionLocal, Base, engine
 from app.models.all_models import User, UserRole
 from app.routers import (
     ai, announcements, auth, clubs, committees, dashboard, duty_charts,
-    event_reports, events, feedback, forms, leaderboard_staff, leaderboard_student,
+    email, event_reports, events, feedback, forms, leaderboard_staff, leaderboard_student,
     notifications, queries, tasks, uploads, users,
 )
 
@@ -73,6 +73,22 @@ async def apply_safe_migrations(conn):
         "CREATE INDEX IF NOT EXISTS idx_queries_raised_by ON queries (raised_by);",
         "CREATE INDEX IF NOT EXISTS idx_queries_status ON queries (status);",
         "CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_id ON audit_logs (actor_id);",
+        # Email Connections table for Google OAuth 2.0 per-user Gmail integration
+        """
+        CREATE TABLE IF NOT EXISTS email_connections (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            provider VARCHAR(50) NOT NULL DEFAULT 'google',
+            email VARCHAR(255) NOT NULL,
+            encrypted_refresh_token TEXT NOT NULL,
+            status VARCHAR(50) NOT NULL DEFAULT 'connected',
+            scopes TEXT,
+            connected_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_email_conn_user_id ON email_connections (user_id);",
+        "CREATE INDEX IF NOT EXISTS idx_email_conn_email ON email_connections (email);",
         "CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs (created_at DESC);",
         "CREATE INDEX IF NOT EXISTS idx_clubs_faculty_id ON clubs (faculty_id);",
         "CREATE INDEX IF NOT EXISTS idx_club_tasks_club_id ON club_tasks (club_id);",
@@ -221,6 +237,7 @@ app.include_router(duty_charts.router)
 app.include_router(committees.router)
 app.include_router(clubs.router)
 app.include_router(ai.router)
+app.include_router(email.router)
 
 # Mount static uploads directory for direct access to uploaded images/proofs
 if os.path.exists(settings.UPLOAD_DIR):

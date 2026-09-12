@@ -573,3 +573,21 @@ class EventReport(Base):
     creator = relationship("User", foreign_keys=[created_by])
 
 
+# 15. EMAIL CONNECTION MODEL (OAuth 2.0 Gmail Connection per User)
+class EmailConnection(Base):
+    __tablename__ = "email_connections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True, nullable=False)
+    provider: Mapped[str] = mapped_column(String(50), default="google", nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    encrypted_refresh_token: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="connected", nullable=False) # connected, revoked, expired
+    scopes: Mapped[str] = mapped_column(Text, nullable=True)
+    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    user = relationship("User", backref="email_connection")
+
+
+

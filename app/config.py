@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     GOOGLE_SERVICE_ACCOUNT_JSON_BASE64: Optional[str] = None
     BLOB_READ_WRITE_TOKEN: Optional[str] = None
     GEMINI_API_KEY: str = _get_gemini_key()
+    
+    # Google Workspace OAuth 2.0 & Gmail Settings
+    GOOGLE_CLIENT_ID: Optional[str] = os.getenv("GOOGLE_CLIENT_ID")
+    GOOGLE_CLIENT_SECRET: Optional[str] = os.getenv("GOOGLE_CLIENT_SECRET")
+    GOOGLE_OAUTH_REDIRECT_URI: Optional[str] = os.getenv("GOOGLE_OAUTH_REDIRECT_URI")
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    MAIL_ENCRYPTION_SECRET: str = os.getenv("MAIL_ENCRYPTION_SECRET", "gu-dsw-mail-encryption-key-2026-secret")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
