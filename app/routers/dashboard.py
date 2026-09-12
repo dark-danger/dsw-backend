@@ -57,13 +57,17 @@ async def get_dashboard_summary(
         )
     )).one()
 
-    # 5. Announcements, Forms, Feedback, Points
-    ann_cnt = (await db.execute(select(func.count(Announcement.id)))).scalar_one()
-    df_cnt = (await db.execute(select(func.count(DynamicForm.id)))).scalar_one()
-    df_resp_cnt = (await db.execute(select(func.count(DynamicFormResponse.id)))).scalar_one()
-    fb_cnt = (await db.execute(select(func.count(FeedbackForm.id)))).scalar_one()
-    fb_resp_cnt = (await db.execute(select(func.count(FeedbackResponse.id)))).scalar_one()
-    total_pts = (await db.execute(select(func.coalesce(func.sum(StudentPointsLedger.points), 0)))).scalar_one()
+    # 5. Announcements, Forms, Feedback, Points in a single consolidated round trip
+    extra_counts = (await db.execute(
+        select(
+            select(func.count(Announcement.id)).scalar_subquery().label("ann_cnt"),
+            select(func.count(DynamicForm.id)).scalar_subquery().label("df_cnt"),
+            select(func.count(DynamicFormResponse.id)).scalar_subquery().label("df_resp_cnt"),
+            select(func.count(FeedbackForm.id)).scalar_subquery().label("fb_cnt"),
+            select(func.count(FeedbackResponse.id)).scalar_subquery().label("fb_resp_cnt"),
+            select(func.coalesce(func.sum(StudentPointsLedger.points), 0)).scalar_subquery().label("total_pts")
+        )
+    )).one()
 
     return DashboardSummaryOut(
         total_faculty=int(user_counts.faculty_cnt or 0),
@@ -86,12 +90,12 @@ async def get_dashboard_summary(
             "open": int(query_counts.open or 0),
             "closed": int(query_counts.closed or 0)
         },
-        total_announcements=int(ann_cnt or 0),
-        total_dynamic_forms=int(df_cnt or 0),
-        total_form_responses=int(df_resp_cnt or 0),
-        total_feedback_forms=int(fb_cnt or 0),
-        total_feedback_responses=int(fb_resp_cnt or 0),
-        total_student_points_awarded=int(total_pts or 0)
+        total_announcements=int(extra_counts.ann_cnt or 0),
+        total_dynamic_forms=int(extra_counts.df_cnt or 0),
+        total_form_responses=int(extra_counts.df_resp_cnt or 0),
+        total_feedback_forms=int(extra_counts.fb_cnt or 0),
+        total_feedback_responses=int(extra_counts.fb_resp_cnt or 0),
+        total_student_points_awarded=int(extra_counts.total_pts or 0)
     )
 
 @router.get("/activity", response_model=List[AuditLogOut])

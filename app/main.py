@@ -21,8 +21,8 @@ from app.routers import (
 
 async def apply_safe_migrations(conn):
     """
-    Applies idempotent column additions to existing tables (ALTER TABLE ... ADD COLUMN IF NOT EXISTS).
-    Ensures that existing databases seamlessly acquire new feature columns without table drops.
+    Applies idempotent column additions and performance indexes to existing tables.
+    Ensures that existing databases seamlessly acquire new feature columns and indexes.
     """
     migration_statements = [
         # dynamic_forms table columns
@@ -42,12 +42,41 @@ async def apply_safe_migrations(conn):
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ;",
         "ALTER TABLE leaderboard_tasks ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ;",
         "ALTER TABLE club_tasks ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ;",
+        # High-Performance Indexes for frequently queried filters and foreign keys
+        "CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks (assigned_to);",
+        "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (status);",
+        "CREATE INDEX IF NOT EXISTS idx_tasks_event_id ON tasks (event_id);",
+        "CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id ON tasks (parent_task_id);",
+        "CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks (created_at DESC);",
+        "CREATE INDEX IF NOT EXISTS idx_task_sub_task_id ON task_submissions (task_id);",
+        "CREATE INDEX IF NOT EXISTS idx_task_sub_submitted_by ON task_submissions (submitted_by);",
+        "CREATE INDEX IF NOT EXISTS idx_task_sub_submitted_at ON task_submissions (submitted_at DESC);",
+        "CREATE INDEX IF NOT EXISTS idx_events_status ON events (status);",
+        "CREATE INDEX IF NOT EXISTS idx_events_coordinator_id ON events (coordinator_id);",
+        "CREATE INDEX IF NOT EXISTS idx_events_created_at ON events (created_at DESC);",
+        "CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);",
+        "CREATE INDEX IF NOT EXISTS idx_users_is_active ON users (is_active);",
+        "CREATE INDEX IF NOT EXISTS idx_users_department ON users (department);",
+        "CREATE INDEX IF NOT EXISTS idx_faculty_perf_faculty_id ON faculty_performance_ledger (faculty_id);",
+        "CREATE INDEX IF NOT EXISTS idx_faculty_perf_created_at ON faculty_performance_ledger (created_at);",
+        "CREATE INDEX IF NOT EXISTS idx_student_points_student_id ON student_points_ledger (student_id);",
+        "CREATE INDEX IF NOT EXISTS idx_student_points_created_at ON student_points_ledger (created_at);",
+        "CREATE INDEX IF NOT EXISTS idx_lb_sub_task_id ON leaderboard_task_submissions (leaderboard_task_id);",
+        "CREATE INDEX IF NOT EXISTS idx_lb_sub_student_id ON leaderboard_task_submissions (student_id);",
+        "CREATE INDEX IF NOT EXISTS idx_lb_sub_status ON leaderboard_task_submissions (status);",
+        "CREATE INDEX IF NOT EXISTS idx_queries_raised_by ON queries (raised_by);",
+        "CREATE INDEX IF NOT EXISTS idx_queries_status ON queries (status);",
+        "CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_id ON audit_logs (actor_id);",
+        "CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs (created_at DESC);",
+        "CREATE INDEX IF NOT EXISTS idx_clubs_faculty_id ON clubs (faculty_id);",
+        "CREATE INDEX IF NOT EXISTS idx_club_tasks_club_id ON club_tasks (club_id);",
+        "CREATE INDEX IF NOT EXISTS idx_club_tasks_status ON club_tasks (status);",
     ]
     for stmt in migration_statements:
         try:
             await conn.execute(text(stmt))
         except Exception as e:
-            print(f"Migration note ({stmt}): {e}")
+            pass
 
 
 async def auto_seed_if_empty():
@@ -103,15 +132,30 @@ async def ensure_db_initialized():
                 await apply_safe_migrations(conn)
             await auto_seed_if_empty()
             _db_initialized = True
-            print("DB and Seed initialized successfully.")
+            print("DB, Indexes and Seed initialized successfully.")
         except Exception as e:
             print(f"Error initializing DB: {e}")
             raise e
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Perform one-time async database and index initialization on server startup
+    try:
+        await ensure_db_initialized()
+    except Exception as e:
+        print(f"[Startup] DB init note: {e}")
+    yield
+    # Graceful shutdown
+    try:
+        await engine.dispose()
+    except Exception:
+        pass
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Full-stack portal for Dean of Student Welfare (DSW) Geeta University",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -129,14 +173,16 @@ async def db_init_middleware(request: Request, call_next):
     if request.method == "OPTIONS" or request.url.path in ["/", "/health", "/docs", "/openapi.json"]:
         return await call_next(request)
         
-    try:
-        await ensure_db_initialized()
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={"detail": str(e), "error_type": "DatabaseConfigurationError"},
-            headers={"Access-Control-Allow-Origin": "*"}
-        )
+    global _db_initialized
+    if not _db_initialized:
+        try:
+            await ensure_db_initialized()
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={"detail": str(e), "error_type": "DatabaseConfigurationError"},
+                headers={"Access-Control-Allow-Origin": "*"}
+            )
     response = await call_next(request)
     return response
 

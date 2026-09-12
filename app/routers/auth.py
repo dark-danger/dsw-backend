@@ -15,7 +15,7 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     clean_email = payload.email.strip().lower()
     clean_pass = payload.password.strip()
     
-    result = await db.execute(select(User).where(func.lower(User.email) == clean_email))
+    result = await db.execute(select(User).where((User.email == clean_email) | (func.lower(User.email) == clean_email)).limit(1))
     user = result.scalar_one_or_none()
     
     if not user or not verify_password(clean_pass, user.password_hash):

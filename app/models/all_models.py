@@ -90,10 +90,10 @@ class Event(Base):
     start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     end_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     venue: Mapped[str] = mapped_column(String(200), nullable=True)
-    coordinator_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
-    status: Mapped[EventStatus] = mapped_column(Enum(EventStatus), default=EventStatus.planned)
-    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    coordinator_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    status: Mapped[EventStatus] = mapped_column(Enum(EventStatus), default=EventStatus.planned, index=True)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
     coordinator = relationship("User", foreign_keys=[coordinator_id])
@@ -109,15 +109,15 @@ class Task(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     task_type: Mapped[str] = mapped_column(String(50), default="standalone") # standalone / event_linked
-    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="SET NULL"), nullable=True)
-    parent_task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True)
-    assigned_to: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    assigned_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="SET NULL"), nullable=True, index=True)
+    parent_task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True, index=True)
+    assigned_to: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    assigned_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     priority: Mapped[TaskPriority] = mapped_column(Enum(TaskPriority), default=TaskPriority.medium)
-    status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), default=TaskStatus.pending)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), default=TaskStatus.pending, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
     event = relationship("Event", back_populates="tasks")
@@ -131,14 +131,14 @@ class TaskSubmission(Base):
     __tablename__ = "task_submissions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
-    submitted_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    submitted_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     file_url: Mapped[str] = mapped_column(String(500), nullable=True)
     file_type: Mapped[str] = mapped_column(String(50), nullable=True) # pdf, doc, jpg, png
     file_name: Mapped[str] = mapped_column(String(255), nullable=True)
     file_size: Mapped[int] = mapped_column(Integer, nullable=True)
-    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
     review_status: Mapped[str] = mapped_column(String(50), default="pending") # pending, approved, declined
     reviewed_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
     review_remarks: Mapped[str] = mapped_column(Text, nullable=True)
@@ -186,12 +186,12 @@ class QueryItem(Base):
     __tablename__ = "queries"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    raised_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    raised_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     raiser_role: Mapped[str] = mapped_column(String(30), nullable=False) # faculty, student
     subject: Mapped[str] = mapped_column(String(200), nullable=False)
     category: Mapped[str] = mapped_column(String(50), default="General") # Academic, Administrative, Technical, Other
     description: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[QueryStatus] = mapped_column(Enum(QueryStatus), default=QueryStatus.open)
+    status: Mapped[QueryStatus] = mapped_column(Enum(QueryStatus), default=QueryStatus.open, index=True)
     admin_remarks: Mapped[str] = mapped_column(Text, nullable=True)
     closed_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
     closed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -366,12 +366,12 @@ class LeaderboardTaskSubmission(Base):
     __tablename__ = "leaderboard_task_submissions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    leaderboard_task_id: Mapped[int] = mapped_column(ForeignKey("leaderboard_tasks.id", ondelete="CASCADE"), nullable=False)
-    student_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    leaderboard_task_id: Mapped[int] = mapped_column(ForeignKey("leaderboard_tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     submission_text: Mapped[str] = mapped_column(Text, nullable=True)
     file_url: Mapped[str] = mapped_column(String(500), nullable=True)
-    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    status: Mapped[str] = mapped_column(String(30), default="pending") # pending, approved, rejected
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    status: Mapped[str] = mapped_column(String(30), default="pending", index=True) # pending, approved, rejected
     points_awarded: Mapped[int] = mapped_column(Integer, nullable=True)
     reviewed_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
     reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -386,13 +386,13 @@ class StudentPointsLedger(Base):
     __tablename__ = "student_points_ledger"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    student_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    student_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     points: Mapped[int] = mapped_column(Integer, nullable=False)
     source_type: Mapped[str] = mapped_column(String(50), nullable=False) # task_submission / manual_award
     source_id: Mapped[int] = mapped_column(ForeignKey("leaderboard_task_submissions.id", ondelete="SET NULL"), nullable=True)
     reason_note: Mapped[str] = mapped_column(Text, nullable=True)
     awarded_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
 
     student = relationship("User", foreign_keys=[student_id])
     awarder = relationship("User", foreign_keys=[awarded_by])
@@ -402,12 +402,12 @@ class FacultyPerformanceLedger(Base):
     __tablename__ = "faculty_performance_ledger"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    faculty_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    faculty_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     score_delta: Mapped[int] = mapped_column(Integer, nullable=False) # +10, +5, -3
     source_type: Mapped[str] = mapped_column(String(50), nullable=False) # task_approved / task_declined / task_overdue
     source_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
     note: Mapped[str] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
 
     faculty = relationship("User", foreign_keys=[faculty_id])
 
@@ -450,12 +450,12 @@ class Club(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     category: Mapped[str] = mapped_column(String(100), default="Technical") # Technical, Cultural, Literary, Sports, Social, Coding, Media
-    faculty_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    faculty_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     kras: Mapped[str] = mapped_column(Text, nullable=True) # Key result areas & annual objectives
     roles_schema: Mapped[list] = mapped_column(JSON, default=list) # Array of configurable roles, e.g. ["President", "Vice President", "General Secretary", "Technical Lead", "Events Lead", "PR & Outreach Head"]
     student_members: Mapped[list] = mapped_column(JSON, default=list) # Array of { id, student_id, name, email, roll_number, branch, semester, phone, role, is_core }
     total_points: Mapped[int] = mapped_column(Integer, default=0)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
@@ -469,13 +469,13 @@ class ClubTask(Base):
     __tablename__ = "club_tasks"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    club_id: Mapped[int] = mapped_column(ForeignKey("clubs.id", ondelete="CASCADE"), nullable=False)
+    club_id: Mapped[int] = mapped_column(ForeignKey("clubs.id", ondelete="CASCADE"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     points_reward: Mapped[int] = mapped_column(Integer, default=20)
     start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    status: Mapped[str] = mapped_column(String(30), default="pending") # pending, submitted, approved, declined
+    status: Mapped[str] = mapped_column(String(30), default="pending", index=True) # pending, submitted, approved, declined
     submission_text: Mapped[str] = mapped_column(Text, nullable=True)
     file_url: Mapped[str] = mapped_column(String(500), nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
