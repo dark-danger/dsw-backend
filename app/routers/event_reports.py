@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from app.database import get_db
 from app.core.deps import get_current_user, require_role
+from app.core.logo_base64 import GEETA_LOGO_BASE64
 from app.models.all_models import EventReport, Event, User, UserRole
 from app.schemas.schemas import EventReportCreate, EventReportUpdate, EventReportOut
 from jinja2 import Template
@@ -288,18 +289,14 @@ async def get_report_printable_html(
         .header-logo {
             text-align: left;
             margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1.5px solid #0f172a;
         }
-        .univ-title {
-            font-size: 20pt;
-            font-weight: bold;
-            color: #d97706;
-            letter-spacing: 0.5px;
-            display: inline-block;
-        }
-        .univ-sub {
-            font-size: 8pt;
-            color: #475569;
-            text-transform: uppercase;
+        .header-logo img {
+            height: 52px;
+            max-width: 100%;
+            object-fit: contain;
+            display: block;
         }
         .report-heading {
             text-align: center;
@@ -384,8 +381,7 @@ async def get_report_printable_html(
     <!-- PAGE 1: IDENTIFICATION & OBJECTIVES -->
     <div class="page">
         <div class="header-logo">
-            <div class="univ-title">GEETA UNIVERSITY</div>
-            <div class="univ-sub">Panipat, Delhi NCR, India • Empowering Minds</div>
+            <img src="{{ logo_url }}" alt="Geeta University Logo" />
         </div>
         <div class="report-heading">EVENT REPORT</div>
 
@@ -449,8 +445,7 @@ async def get_report_printable_html(
     <!-- PAGE 2: APPROVALS, NOTICES & GUESTS -->
     <div class="page">
         <div class="header-logo">
-            <div class="univ-title">GEETA UNIVERSITY</div>
-            <div class="univ-sub">Panipat, Delhi NCR, India • Empowering Minds</div>
+            <img src="{{ logo_url }}" alt="Geeta University Logo" />
         </div>
         <div class="report-heading">EVENT REPORT</div>
 
@@ -505,8 +500,7 @@ async def get_report_printable_html(
     <!-- PAGE 3: BUDGET, EXPENSES, MINUTE TO MINUTE & PARTICIPANTS -->
     <div class="page">
         <div class="header-logo">
-            <div class="univ-title">GEETA UNIVERSITY</div>
-            <div class="univ-sub">Panipat, Delhi NCR, India • Empowering Minds</div>
+            <img src="{{ logo_url }}" alt="Geeta University Logo" />
         </div>
         <div class="report-heading">EVENT REPORT</div>
 
@@ -602,8 +596,7 @@ async def get_report_printable_html(
     <!-- PAGE 4: HIGHLIGHTS, WINNERS & UTILIZATION -->
     <div class="page">
         <div class="header-logo">
-            <div class="univ-title">GEETA UNIVERSITY</div>
-            <div class="univ-sub">Panipat, Delhi NCR, India • Empowering Minds</div>
+            <img src="{{ logo_url }}" alt="Geeta University Logo" />
         </div>
         <div class="report-heading">EVENT REPORT</div>
 
@@ -689,8 +682,7 @@ async def get_report_printable_html(
     <!-- PAGE 5: PRESS RELEASE, FEEDBACK & SIGNATURES -->
     <div class="page">
         <div class="header-logo">
-            <div class="univ-title">GEETA UNIVERSITY</div>
-            <div class="univ-sub">Panipat, Delhi NCR, India • Empowering Minds</div>
+            <img src="{{ logo_url }}" alt="Geeta University Logo" />
         </div>
         <div class="report-heading">EVENT REPORT</div>
 
@@ -732,4 +724,4 @@ async def get_report_printable_html(
 </html>
     """
     template = Template(html_template)
-    return template.render(report=report)
+    return template.render(report=report, logo_url=GEETA_LOGO_BASE64)

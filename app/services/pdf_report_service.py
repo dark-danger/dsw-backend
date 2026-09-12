@@ -1,5 +1,6 @@
 from jinja2 import Template
 from typing import Dict, Any, List
+from app.core.logo_base64 import GEETA_LOGO_BASE64
 
 MICRO_REPORT_TEMPLATE = """
 <!DOCTYPE html>
@@ -10,7 +11,7 @@ MICRO_REPORT_TEMPLATE = """
     <style>
         body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 40px; color: #1e293b; background: #fff; }
         .header { border-bottom: 3px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; }
-        .logo-title { font-size: 22px; font-weight: bold; color: #1e3a8a; }
+        .logo-img { height: 48px; object-fit: contain; }
         .sub { font-size: 13px; color: #64748b; margin-top: 4px; }
         .badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; }
         .approved { background: #dcfce7; color: #166534; }
@@ -26,8 +27,8 @@ MICRO_REPORT_TEMPLATE = """
 <body>
     <div class="header">
         <div>
-            <div class="logo-title">GEETA UNIVERSITY - DEAN OF STUDENT WELFARE</div>
-            <div class="sub">Micro Task Completion Report</div>
+            <img src="{{ logo_url }}" class="logo-img" alt="Geeta University" />
+            <div class="sub">Dean of Student Welfare • Micro Task Completion Report</div>
         </div>
         <div>
             <span class="badge {{ task.status }}">{{ task.status | upper }}</span>
@@ -111,8 +112,8 @@ MERGED_REPORT_TEMPLATE = """
 </head>
 <body>
     <div class="header">
-        <div class="logo-title">GEETA UNIVERSITY - DEAN OF STUDENT WELFARE</div>
-        <div class="sub">CONSOLIDATED EVENT SUMMARY & TASK REPORT</div>
+        <img src="{{ logo_url }}" style="height: 52px; object-fit: contain; margin-bottom: 8px;" alt="Geeta University" />
+        <div class="sub">DEAN OF STUDENT WELFARE (DSW) • CONSOLIDATED EVENT & TASK REPORT</div>
     </div>
 
     <div class="section">
@@ -200,8 +201,8 @@ MERGED_REPORT_TEMPLATE = """
 
 def generate_micro_report_html(task_data: Dict[str, Any], event_data: Dict[str, Any], submission_data: Dict[str, Any]) -> str:
     template = Template(MICRO_REPORT_TEMPLATE)
-    return template.render(task=task_data, event=event_data, submission=submission_data)
+    return template.render(task=task_data, event=event_data, submission=submission_data, logo_url=GEETA_LOGO_BASE64)
 
 def generate_merged_report_html(event_data: Dict[str, Any], tasks_data: List[Dict[str, Any]], stats_data: Dict[str, Any]) -> str:
     template = Template(MERGED_REPORT_TEMPLATE)
-    return template.render(event=event_data, tasks=tasks_data, stats=stats_data)
+    return template.render(event=event_data, tasks=tasks_data, stats=stats_data, logo_url=GEETA_LOGO_BASE64)
