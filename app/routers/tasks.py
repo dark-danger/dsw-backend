@@ -62,6 +62,7 @@ def build_task_out(t: Task) -> TaskOut:
         assigned_to=t.assigned_to,
         assignee=assignee_val,
         assigned_by=t.assigned_by,
+        start_date=t.start_date if hasattr(t, "start_date") else None,
         due_date=t.due_date,
         priority=t.priority,
         status=t.status,
@@ -90,6 +91,7 @@ async def create_task(
         parent_task_id=payload.parent_task_id,
         assigned_to=payload.assigned_to,
         assigned_by=current_user.id,
+        start_date=payload.start_date,
         due_date=payload.due_date,
         priority=payload.priority,
         status=TaskStatus.pending

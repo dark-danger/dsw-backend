@@ -57,6 +57,7 @@ def build_club_task_out(t: ClubTask) -> ClubTaskOut:
         title=t.title,
         description=t.description,
         points_reward=t.points_reward,
+        start_date=t.start_date if hasattr(t, "start_date") else None,
         due_date=t.due_date,
         status=t.status,
         submission_text=t.submission_text,
@@ -344,6 +345,7 @@ async def create_club_task(
         title=payload.title,
         description=payload.description,
         points_reward=payload.points_reward or 20,
+        start_date=payload.start_date,
         due_date=payload.due_date,
         status="pending",
         created_by=current_user.id

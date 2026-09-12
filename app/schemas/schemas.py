@@ -94,6 +94,7 @@ class TaskCreate(BaseModel):
     event_id: Optional[int] = None
     parent_task_id: Optional[int] = None
     assigned_to: int
+    start_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
     priority: TaskPriority = TaskPriority.medium
 
@@ -102,6 +103,7 @@ class TaskUpdate(BaseModel):
     description: Optional[str] = None
     assigned_to: Optional[int] = None
     event_id: Optional[int] = None
+    start_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
     priority: Optional[TaskPriority] = None
 
@@ -135,6 +137,7 @@ class TaskOut(BaseModel):
     assigned_to: int
     assignee: Optional[UserOut] = None
     assigned_by: int
+    start_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
     priority: TaskPriority
     status: TaskStatus
@@ -391,6 +394,7 @@ class LeaderboardTaskCreate(BaseModel):
     description: Optional[str] = None
     points_value: int = 10
     submission_mode: SubmissionMode = SubmissionMode.single
+    start_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
 
 class LeaderboardTaskOut(BaseModel):
@@ -399,6 +403,7 @@ class LeaderboardTaskOut(BaseModel):
     description: Optional[str] = None
     points_value: int
     submission_mode: SubmissionMode
+    start_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
     is_active: bool
     created_by: int
@@ -625,6 +630,7 @@ class ClubTaskCreate(BaseModel):
     title: str
     description: Optional[str] = None
     points_reward: int = 20
+    start_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
 
 class ClubTaskSubmissionPayload(BaseModel):
@@ -641,6 +647,7 @@ class ClubTaskOut(BaseModel):
     title: str
     description: Optional[str] = None
     points_reward: int
+    start_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
     status: str
     submission_text: Optional[str] = None

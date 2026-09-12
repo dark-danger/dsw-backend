@@ -38,6 +38,10 @@ async def apply_safe_migrations(conn):
         # other table column verifications
         "ALTER TABLE events ADD COLUMN IF NOT EXISTS event_type VARCHAR(50) DEFAULT 'Seminar';",
         "ALTER TABLE events ADD COLUMN IF NOT EXISTS venue VARCHAR(200);",
+        # Task start_date time limit columns
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ;",
+        "ALTER TABLE leaderboard_tasks ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ;",
+        "ALTER TABLE club_tasks ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ;",
     ]
     for stmt in migration_statements:
         try:

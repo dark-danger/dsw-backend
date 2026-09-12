@@ -27,6 +27,7 @@ def build_leaderboard_task_out(t: LeaderboardTask, student_id: Optional[int]) ->
         description=t.description,
         points_value=t.points_value,
         submission_mode=t.submission_mode,
+        start_date=t.start_date if hasattr(t, "start_date") else None,
         due_date=t.due_date,
         is_active=t.is_active,
         created_by=t.created_by,
@@ -46,6 +47,7 @@ async def create_leaderboard_task(
         description=payload.description,
         points_value=payload.points_value,
         submission_mode=payload.submission_mode,
+        start_date=payload.start_date,
         due_date=payload.due_date,
         created_by=current_user.id
     )

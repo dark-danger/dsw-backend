@@ -113,6 +113,7 @@ class Task(Base):
     parent_task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True)
     assigned_to: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     assigned_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     priority: Mapped[TaskPriority] = mapped_column(Enum(TaskPriority), default=TaskPriority.medium)
     status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), default=TaskStatus.pending)
@@ -351,6 +352,7 @@ class LeaderboardTask(Base):
     description: Mapped[str] = mapped_column(Text, nullable=True)
     points_value: Mapped[int] = mapped_column(Integer, default=10)
     submission_mode: Mapped[SubmissionMode] = mapped_column(Enum(SubmissionMode), default=SubmissionMode.single)
+    start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
@@ -471,6 +473,7 @@ class ClubTask(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     points_reward: Mapped[int] = mapped_column(Integer, default=20)
+    start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="pending") # pending, submitted, approved, declined
     submission_text: Mapped[str] = mapped_column(Text, nullable=True)
