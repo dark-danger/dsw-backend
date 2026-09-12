@@ -247,6 +247,9 @@ class QueryCreate(BaseModel):
     subject: str
     category: str = "General"
     description: str
+    target_type: Optional[str] = "admin" # "admin" or "faculty_head"
+    target_faculty_id: Optional[int] = None
+    target_faculty_name: Optional[str] = None
 
 class QueryClosePayload(BaseModel):
     admin_remarks: str
@@ -260,6 +263,10 @@ class QueryOut(BaseModel):
     category: str
     description: str
     status: QueryStatus
+    target_type: Optional[str] = "admin"
+    target_faculty_id: Optional[int] = None
+    target_faculty_name: Optional[str] = None
+    target_faculty: Optional[UserOut] = None
     admin_remarks: Optional[str] = None
     closed_by: Optional[int] = None
     closer: Optional[UserOut] = None
@@ -579,6 +586,7 @@ class ClubMemberSchema(BaseModel):
     phone: Optional[str] = None
     role: str
     is_core: Optional[bool] = True
+    password: Optional[str] = None
 
 class ClubCreate(BaseModel):
     name: str

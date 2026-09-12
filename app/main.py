@@ -42,6 +42,12 @@ async def apply_safe_migrations(conn):
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ;",
         "ALTER TABLE leaderboard_tasks ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ;",
         "ALTER TABLE club_tasks ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ;",
+        # Query target columns & indexes
+        "ALTER TABLE queries ADD COLUMN IF NOT EXISTS target_type VARCHAR(50) DEFAULT 'admin';",
+        "ALTER TABLE queries ADD COLUMN IF NOT EXISTS target_faculty_id INTEGER;",
+        "ALTER TABLE queries ADD COLUMN IF NOT EXISTS target_faculty_name VARCHAR(150);",
+        "CREATE INDEX IF NOT EXISTS idx_queries_target_faculty_id ON queries (target_faculty_id);",
+        "CREATE INDEX IF NOT EXISTS idx_queries_target_type ON queries (target_type);",
         # High-Performance Indexes for frequently queried filters and foreign keys
         "CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks (assigned_to);",
         "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (status);",

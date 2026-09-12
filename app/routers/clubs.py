@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.core.deps import get_current_user, require_role
+from app.core.security import get_password_hash
 from app.models.all_models import User, UserRole, Club, ClubTask
 from app.schemas.schemas import (
     ClubCreate, ClubUpdate, ClubOut, ClubMemberSchema,
@@ -246,7 +247,7 @@ async def delete_club(
     return {"message": "Club deleted successfully"}
 
 
-# 7. ADD STUDENT MEMBER (Admin or assigned Faculty Coordinator)
+# 7. ADD STUDENT MEMBER & AUTO-PROVISION LOGIN (Admin or assigned Faculty Coordinator)
 @router.post("/{club_id}/members", response_model=ClubOut)
 async def add_club_member(
     club_id: int,
@@ -264,14 +265,59 @@ async def add_club_member(
     if not club:
         raise HTTPException(status_code=404, detail="Club not found")
 
+    # Only assigned Faculty Coordinator or Super Admin can assign members & roles
     if current_user.role != UserRole.super_admin and club.faculty_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to manage members of this club")
 
+    # 1. Auto-provision or link Student Portal User account
+    clean_email = payload.email.strip().lower()
+    s_res = await db.execute(select(User).where(User.email == clean_email))
+    student_user = s_res.scalar_one_or_none()
+
+    if not student_user and payload.roll_number:
+        clean_roll = payload.roll_number.strip()
+        s_res2 = await db.execute(select(User).where(User.roll_number == clean_roll))
+        student_user = s_res2.scalar_one_or_none()
+
+    raw_password = (payload.password or "President@123").strip()
+    if not student_user:
+        # Create student user account
+        student_user = User(
+            name=payload.name.strip(),
+            email=clean_email,
+            phone=payload.phone,
+            roll_number=payload.roll_number,
+            course_branch=payload.branch,
+            year=payload.semester,
+            role=UserRole.student,
+            password_hash=get_password_hash(raw_password),
+            is_active=True,
+            must_change_password=False
+        )
+        db.add(student_user)
+        await db.flush()
+    else:
+        # Update details if not present
+        if payload.roll_number and not student_user.roll_number:
+            student_user.roll_number = payload.roll_number
+        if payload.branch and not student_user.course_branch:
+            student_user.course_branch = payload.branch
+        if payload.semester and not student_user.year:
+            student_user.year = payload.semester
+        if payload.phone and not student_user.phone:
+            student_user.phone = payload.phone
+        if payload.password and payload.password.strip():
+            student_user.password_hash = get_password_hash(payload.password.strip())
+
+    # 2. Append to club student_members JSON
     members = list(club.student_members or [])
     new_mem = payload.model_dump()
     if not new_mem.get("id"):
         new_mem["id"] = f"mem_{uuid.uuid4().hex[:8]}"
+    new_mem["student_id"] = student_user.id
 
+    # Avoid duplicate additions of same student email in this club
+    members = [m for m in members if m.get("email", "").lower() != clean_email]
     members.append(new_mem)
     club.student_members = members
 
@@ -327,18 +373,22 @@ async def get_club_tasks(
     return [build_club_task_out(t) for t in tasks]
 
 
-# 10. CREATE CLUB TASK (Admin only)
+# 10. CREATE CLUB TASK (Admin or assigned Faculty Coordinator)
 @router.post("/{club_id}/tasks", response_model=ClubTaskOut)
 async def create_club_task(
     club_id: int,
     payload: ClubTaskCreate,
-    current_user: User = Depends(require_role([UserRole.super_admin])),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     c_res = await db.execute(select(Club).where(Club.id == club_id))
     club = c_res.scalar_one_or_none()
     if not club:
         raise HTTPException(status_code=404, detail="Club not found")
+
+    # Only super admin or the assigned faculty coordinator can assign tasks to the club
+    if current_user.role != UserRole.super_admin and club.faculty_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to assign tasks for this club")
 
     task = ClubTask(
         club_id=club_id,
@@ -360,7 +410,7 @@ async def create_club_task(
     return build_club_task_out(created)
 
 
-# 11. SUBMIT CLUB TASK PROOF
+# 11. SUBMIT CLUB TASK PROOF (Students / Club Officers)
 @router.post("/tasks/{task_id}/submit", response_model=ClubTaskOut)
 async def submit_club_task(
     task_id: int,
@@ -386,11 +436,11 @@ async def submit_club_task(
     return build_club_task_out(task)
 
 
-# 12. APPROVE CLUB TASK (Admin only) -> Awards Points to Club!
+# 12. APPROVE CLUB TASK (Admin or assigned Faculty Coordinator) -> Awards Points to Club!
 @router.post("/tasks/{task_id}/approve", response_model=ClubTaskOut)
 async def approve_club_task(
     task_id: int,
-    current_user: User = Depends(require_role([UserRole.super_admin])),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(
@@ -399,28 +449,34 @@ async def approve_club_task(
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Club task not found")
+
+    c_res = await db.execute(select(Club).where(Club.id == task.club_id))
+    club = c_res.scalar_one_or_none()
+    if not club:
+        raise HTTPException(status_code=404, detail="Associated club not found")
+
+    # Super admin or assigned faculty coordinator can approve
+    if current_user.role != UserRole.super_admin and club.faculty_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to approve tasks for this club")
 
     task.status = "approved"
     task.reviewed_by = current_user.id
     task.reviewed_at = utc_now()
 
     # Award points to the club
-    c_res = await db.execute(select(Club).where(Club.id == task.club_id))
-    club = c_res.scalar_one_or_none()
-    if club:
-        club.total_points = (club.total_points or 0) + (task.points_reward or 20)
+    club.total_points = (club.total_points or 0) + (task.points_reward or 20)
 
     await db.commit()
     await db.refresh(task)
     return build_club_task_out(task)
 
 
-# 13. DECLINE CLUB TASK (Admin only)
+# 13. DECLINE CLUB TASK (Admin or assigned Faculty Coordinator)
 @router.post("/tasks/{task_id}/decline", response_model=ClubTaskOut)
 async def decline_club_task(
     task_id: int,
     payload: ClubTaskReviewPayload,
-    current_user: User = Depends(require_role([UserRole.super_admin])),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(
@@ -429,6 +485,15 @@ async def decline_club_task(
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Club task not found")
+
+    c_res = await db.execute(select(Club).where(Club.id == task.club_id))
+    club = c_res.scalar_one_or_none()
+    if not club:
+        raise HTTPException(status_code=404, detail="Associated club not found")
+
+    # Super admin or assigned faculty coordinator can decline
+    if current_user.role != UserRole.super_admin and club.faculty_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to decline tasks for this club")
 
     task.status = "declined"
     task.reviewed_by = current_user.id

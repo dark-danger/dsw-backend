@@ -192,6 +192,9 @@ class QueryItem(Base):
     category: Mapped[str] = mapped_column(String(50), default="General") # Academic, Administrative, Technical, Other
     description: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[QueryStatus] = mapped_column(Enum(QueryStatus), default=QueryStatus.open, index=True)
+    target_type: Mapped[str] = mapped_column(String(50), default="admin", index=True) # admin, faculty_head
+    target_faculty_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    target_faculty_name: Mapped[str] = mapped_column(String(150), nullable=True)
     admin_remarks: Mapped[str] = mapped_column(Text, nullable=True)
     closed_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
     closed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -200,6 +203,7 @@ class QueryItem(Base):
 
     raiser = relationship("User", foreign_keys=[raised_by])
     closer = relationship("User", foreign_keys=[closed_by])
+    target_faculty = relationship("User", foreign_keys=[target_faculty_id])
 
 
 # 5.5. DUTY CHART MODEL
