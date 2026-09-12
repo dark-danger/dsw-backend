@@ -17,12 +17,12 @@ if db_url.startswith("postgres://"):
 elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+"):
     db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-connect_args = {
-    "timeout": 5.0,
-    "command_timeout": 5.0
-}
-
 if db_url.startswith("postgresql+asyncpg"):
+    connect_args = {
+        "timeout": 10.0,
+        "command_timeout": 10.0,
+        "statement_cache_size": 0
+    }
     # asyncpg does NOT accept sslmode/channel_binding as query params
     # Strip them out and pass ssl via connect_args instead
     db_url = re.sub(r'[\&?]sslmode=[^\&]*', '', db_url)
@@ -35,12 +35,13 @@ if db_url.startswith("postgresql+asyncpg"):
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = _ssl.CERT_NONE
     connect_args["ssl"] = ssl_ctx
-    # Supabase Supavisor (Transaction Pooler port 6543) does NOT support
-    # prepared statements. Disabling cache prevents "database does not exist" errors.
-    connect_args["statement_cache_size"] = 0
 
 elif db_url.startswith("sqlite"):
-    connect_args["check_same_thread"] = False
+    connect_args = {
+        "check_same_thread": False
+    }
+else:
+    connect_args = {}
 
 print(f"[DB] Using: {db_url[:40]}...")
 

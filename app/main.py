@@ -61,8 +61,6 @@ async def auto_seed_if_empty():
 _db_initialized = False
 
 async def ensure_db_initialized():
-    if not settings.DATABASE_URL:
-        raise RuntimeError("CRITICAL ERROR: Supabase DATABASE_URL is missing in Vercel environment variables. You must set it to prevent data loss.")
     global _db_initialized
     if not _db_initialized:
         try:
