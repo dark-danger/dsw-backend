@@ -248,7 +248,21 @@ class DynamicForm(Base):
     description: Mapped[str] = mapped_column(Text, nullable=True)
     form_schema: Mapped[dict] = mapped_column(JSON, nullable=False) # JSON array of field definitions
     google_sheet_id: Mapped[str] = mapped_column(String(200), nullable=True)
+    google_sheet_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    google_webhook_url: Mapped[str] = mapped_column(String(500), nullable=True)
     google_sheet_tab_name: Mapped[str] = mapped_column(String(100), nullable=True)
+
+    # Image upload toggle
+    enable_image_upload: Mapped[bool] = mapped_column(Boolean, default=False)
+    image_upload_label: Mapped[str] = mapped_column(String(200), default="Upload Document / Photo")
+    image_upload_required: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # UPI QR Code Payments
+    enable_payment: Mapped[bool] = mapped_column(Boolean, default=False)
+    payment_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    upi_id: Mapped[str] = mapped_column(String(100), nullable=True)
+    upi_payee_name: Mapped[str] = mapped_column(String(200), nullable=True)
+
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     public_slug: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)

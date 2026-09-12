@@ -281,7 +281,21 @@ class DynamicFormCreate(BaseModel):
     description: Optional[str] = None
     fields: List[FormFieldSchema]
     google_sheet_id: Optional[str] = None
+    google_sheet_url: Optional[str] = None
+    google_webhook_url: Optional[str] = None
     google_sheet_tab_name: Optional[str] = None
+
+    # Image Upload Toggle
+    enable_image_upload: bool = False
+    image_upload_label: Optional[str] = "Upload Document / Photo"
+    image_upload_required: bool = False
+
+    # UPI QR Payments
+    enable_payment: bool = False
+    payment_amount: float = 0.0
+    upi_id: Optional[str] = None
+    upi_payee_name: Optional[str] = None
+
 
 class DynamicFormOut(BaseModel):
     id: int
@@ -290,7 +304,21 @@ class DynamicFormOut(BaseModel):
     description: Optional[str] = None
     form_schema: List[FormFieldSchema]
     google_sheet_id: Optional[str] = None
+    google_sheet_url: Optional[str] = None
+    google_webhook_url: Optional[str] = None
     google_sheet_tab_name: Optional[str] = None
+
+    # Image Upload Toggle
+    enable_image_upload: bool = False
+    image_upload_label: Optional[str] = "Upload Document / Photo"
+    image_upload_required: bool = False
+
+    # UPI QR Payments
+    enable_payment: bool = False
+    payment_amount: float = 0.0
+    upi_id: Optional[str] = None
+    upi_payee_name: Optional[str] = None
+
     is_active: bool
     public_slug: str
     created_by: int
@@ -299,6 +327,7 @@ class DynamicFormOut(BaseModel):
 
     class Config:
         from_attributes = True
+
 
 class DynamicFormResponseOut(BaseModel):
     id: int
