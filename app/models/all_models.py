@@ -98,6 +98,7 @@ class Event(Base):
 
     coordinator = relationship("User", foreign_keys=[coordinator_id])
     tasks = relationship("Task", back_populates="event", cascade="all, delete-orphan")
+    reports = relationship("EventReport", back_populates="event", cascade="all, delete-orphan")
 
 
 # 3. TASK & SUBMISSION MODELS
@@ -473,4 +474,81 @@ class ClubTask(Base):
     submitter = relationship("User", foreign_keys=[submitted_by])
     reviewer = relationship("User", foreign_keys=[reviewed_by])
     creator = relationship("User", foreign_keys=[created_by])
+
+
+# 10. OFFICIAL EVENT REPORT MODEL (GEETA UNIVERSITY 7-PAGE STANDARD)
+class EventReport(Base):
+    __tablename__ = "event_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="SET NULL"), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="draft") # draft, submitted, approved
+
+    # Page 1: Identification & SDGs
+    category: Mapped[str] = mapped_column(String(100), nullable=True)
+    sub_category: Mapped[str] = mapped_column(String(100), nullable=True)
+    sdg_mapping: Mapped[str] = mapped_column(String(255), nullable=True)
+    event_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    organized_by: Mapped[str] = mapped_column(String(255), nullable=True)
+    sponsorship_orgs: Mapped[str] = mapped_column(String(255), nullable=True)
+    coordinator_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    from_date: Mapped[str] = mapped_column(String(50), nullable=True)
+    to_date: Mapped[str] = mapped_column(String(50), nullable=True)
+    total_days: Mapped[int] = mapped_column(Integer, default=1)
+    venue: Mapped[str] = mapped_column(String(255), nullable=True)
+    description: Mapped[str] = mapped_column(Text, nullable=True)
+    objectives_sdg: Mapped[str] = mapped_column(Text, nullable=True)
+    expected_outcome: Mapped[str] = mapped_column(Text, nullable=True)
+    target_audience: Mapped[str] = mapped_column(String(255), nullable=True)
+
+    # Page 2: Approvals, Circular, Poster, QR, Resource Persons, Guests
+    proposal_approval_doc: Mapped[str] = mapped_column(String(500), nullable=True)
+    circular_notice_doc: Mapped[str] = mapped_column(String(500), nullable=True)
+    circular_ref_no: Mapped[str] = mapped_column(String(200), nullable=True)
+    event_poster_doc: Mapped[str] = mapped_column(String(500), nullable=True)
+    registration_link: Mapped[str] = mapped_column(String(500), nullable=True)
+    registration_qr_doc: Mapped[str] = mapped_column(String(500), nullable=True)
+    resource_person_details: Mapped[str] = mapped_column(Text, nullable=True)
+    invitation_letter_doc: Mapped[str] = mapped_column(String(500), nullable=True)
+    guest_details: Mapped[str] = mapped_column(Text, nullable=True)
+
+    # Page 3: Budget, Expenses, Minute-to-Minute, Attendance Counts
+    approved_budget_doc: Mapped[str] = mapped_column(String(500), nullable=True)
+    budget_particulars: Mapped[list] = mapped_column(JSON, default=list)
+    total_budget_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    expense_bills_doc: Mapped[str] = mapped_column(String(500), nullable=True)
+    total_budget: Mapped[float] = mapped_column(Float, default=0.0)
+    total_expenses: Mapped[float] = mapped_column(Float, default=0.0)
+    total_budget_words: Mapped[str] = mapped_column(String(255), nullable=True)
+    total_expense_words: Mapped[str] = mapped_column(String(255), nullable=True)
+    minute_to_minute: Mapped[list] = mapped_column(JSON, default=list)
+    participants_gu_students: Mapped[int] = mapped_column(Integer, default=0)
+    participants_gu_faculty: Mapped[int] = mapped_column(Integer, default=0)
+    participants_external: Mapped[int] = mapped_column(Integer, default=0)
+    participants_total: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Page 4: Attendees List, Geo-tagged Photos, Winners, Handover, Learning Outcome
+    attendees_list_doc: Mapped[str] = mapped_column(String(500), nullable=True)
+    event_photos: Mapped[list] = mapped_column(JSON, default=list)
+    prize_winners: Mapped[list] = mapped_column(JSON, default=list)
+    utilization_items: Mapped[list] = mapped_column(JSON, default=list)
+    learning_outcome: Mapped[str] = mapped_column(Text, nullable=True)
+
+    # Page 5: Press Release, Feedbacks, Signatures
+    newspaper_name: Mapped[str] = mapped_column(String(255), nullable=True)
+    press_release_doc: Mapped[str] = mapped_column(String(500), nullable=True)
+    feedback_guest: Mapped[str] = mapped_column(Text, nullable=True)
+    feedback_participants: Mapped[str] = mapped_column(Text, nullable=True)
+    coordinator_signature: Mapped[str] = mapped_column(String(255), nullable=True)
+    head_of_school_signature: Mapped[str] = mapped_column(String(255), nullable=True)
+    dsw_verified_by: Mapped[str] = mapped_column(String(255), nullable=True)
+
+    # Metadata
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    event = relationship("Event", back_populates="reports")
+    creator = relationship("User", foreign_keys=[created_by])
+
 

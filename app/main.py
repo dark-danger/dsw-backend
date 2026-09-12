@@ -6,13 +6,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import select, func
 
+from fastapi.staticfiles import StaticFiles
+
 from app.config import settings
 from app.core.security import get_password_hash
 from app.database import AsyncSessionLocal, Base, engine
 from app.models.all_models import User, UserRole
 from app.routers import (
     announcements, auth, clubs, committees, dashboard, duty_charts,
-    events, feedback, forms, leaderboard_staff, leaderboard_student,
+    event_reports, events, feedback, forms, leaderboard_staff, leaderboard_student,
     notifications, queries, tasks, uploads, users,
 )
 
@@ -121,6 +123,7 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(tasks.router)
 app.include_router(events.router)
+app.include_router(event_reports.router)
 app.include_router(announcements.router)
 app.include_router(queries.router)
 app.include_router(forms.router)
@@ -133,6 +136,10 @@ app.include_router(uploads.router)
 app.include_router(duty_charts.router)
 app.include_router(committees.router)
 app.include_router(clubs.router)
+
+# Mount static uploads directory for direct access to uploaded images/proofs
+if os.path.exists(settings.UPLOAD_DIR):
+    app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
 
 @app.get("/health")

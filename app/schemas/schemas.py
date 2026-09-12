@@ -637,3 +637,189 @@ class ClubRankingOut(BaseModel):
     tasks_completed: int
     member_count: int
 
+
+# --- OFFICIAL EVENT REPORT SCHEMAS ---
+class EventReportCreate(BaseModel):
+    event_id: Optional[int] = None
+    status: Optional[str] = "draft"
+    category: Optional[str] = None
+    sub_category: Optional[str] = None
+    sdg_mapping: Optional[str] = None
+    event_name: str
+    organized_by: Optional[str] = None
+    sponsorship_orgs: Optional[str] = None
+    coordinator_name: Optional[str] = None
+    from_date: Optional[str] = None
+    to_date: Optional[str] = None
+    total_days: Optional[int] = 1
+    venue: Optional[str] = None
+    description: Optional[str] = None
+    objectives_sdg: Optional[str] = None
+    expected_outcome: Optional[str] = None
+    target_audience: Optional[str] = None
+
+    proposal_approval_doc: Optional[str] = None
+    circular_notice_doc: Optional[str] = None
+    circular_ref_no: Optional[str] = None
+    event_poster_doc: Optional[str] = None
+    registration_link: Optional[str] = None
+    registration_qr_doc: Optional[str] = None
+    resource_person_details: Optional[str] = None
+    invitation_letter_doc: Optional[str] = None
+    guest_details: Optional[str] = None
+
+    approved_budget_doc: Optional[str] = None
+    budget_particulars: Optional[List[Dict[str, Any]]] = []
+    total_budget_amount: Optional[float] = 0.0
+    expense_bills_doc: Optional[str] = None
+    total_budget: Optional[float] = 0.0
+    total_expenses: Optional[float] = 0.0
+    total_budget_words: Optional[str] = None
+    total_expense_words: Optional[str] = None
+    minute_to_minute: Optional[List[Dict[str, Any]]] = []
+    participants_gu_students: Optional[int] = 0
+    participants_gu_faculty: Optional[int] = 0
+    participants_external: Optional[int] = 0
+    participants_total: Optional[int] = 0
+
+    attendees_list_doc: Optional[str] = None
+    event_photos: Optional[List[Dict[str, Any]]] = []
+    prize_winners: Optional[List[Dict[str, Any]]] = []
+    utilization_items: Optional[List[Dict[str, Any]]] = []
+    learning_outcome: Optional[str] = None
+
+    newspaper_name: Optional[str] = None
+    press_release_doc: Optional[str] = None
+    feedback_guest: Optional[str] = None
+    feedback_participants: Optional[str] = None
+    coordinator_signature: Optional[str] = None
+    head_of_school_signature: Optional[str] = None
+    dsw_verified_by: Optional[str] = None
+
+
+class EventReportUpdate(BaseModel):
+    event_id: Optional[int] = None
+    status: Optional[str] = None
+    category: Optional[str] = None
+    sub_category: Optional[str] = None
+    sdg_mapping: Optional[str] = None
+    event_name: Optional[str] = None
+    organized_by: Optional[str] = None
+    sponsorship_orgs: Optional[str] = None
+    coordinator_name: Optional[str] = None
+    from_date: Optional[str] = None
+    to_date: Optional[str] = None
+    total_days: Optional[int] = None
+    venue: Optional[str] = None
+    description: Optional[str] = None
+    objectives_sdg: Optional[str] = None
+    expected_outcome: Optional[str] = None
+    target_audience: Optional[str] = None
+
+    proposal_approval_doc: Optional[str] = None
+    circular_notice_doc: Optional[str] = None
+    circular_ref_no: Optional[str] = None
+    event_poster_doc: Optional[str] = None
+    registration_link: Optional[str] = None
+    registration_qr_doc: Optional[str] = None
+    resource_person_details: Optional[str] = None
+    invitation_letter_doc: Optional[str] = None
+    guest_details: Optional[str] = None
+
+    approved_budget_doc: Optional[str] = None
+    budget_particulars: Optional[List[Dict[str, Any]]] = None
+    total_budget_amount: Optional[float] = None
+    expense_bills_doc: Optional[str] = None
+    total_budget: Optional[float] = None
+    total_expenses: Optional[float] = None
+    total_budget_words: Optional[str] = None
+    total_expense_words: Optional[str] = None
+    minute_to_minute: Optional[List[Dict[str, Any]]] = None
+    participants_gu_students: Optional[int] = None
+    participants_gu_faculty: Optional[int] = None
+    participants_external: Optional[int] = None
+    participants_total: Optional[int] = None
+
+    attendees_list_doc: Optional[str] = None
+    event_photos: Optional[List[Dict[str, Any]]] = None
+    prize_winners: Optional[List[Dict[str, Any]]] = None
+    utilization_items: Optional[List[Dict[str, Any]]] = None
+    learning_outcome: Optional[str] = None
+
+    newspaper_name: Optional[str] = None
+    press_release_doc: Optional[str] = None
+    feedback_guest: Optional[str] = None
+    feedback_participants: Optional[str] = None
+    coordinator_signature: Optional[str] = None
+    head_of_school_signature: Optional[str] = None
+    dsw_verified_by: Optional[str] = None
+
+
+class EventReportOut(BaseModel):
+    id: int
+    event_id: Optional[int] = None
+    event_title: Optional[str] = None
+    status: str
+    category: Optional[str] = None
+    sub_category: Optional[str] = None
+    sdg_mapping: Optional[str] = None
+    event_name: str
+    organized_by: Optional[str] = None
+    sponsorship_orgs: Optional[str] = None
+    coordinator_name: Optional[str] = None
+    from_date: Optional[str] = None
+    to_date: Optional[str] = None
+    total_days: Optional[int] = 1
+    venue: Optional[str] = None
+    description: Optional[str] = None
+    objectives_sdg: Optional[str] = None
+    expected_outcome: Optional[str] = None
+    target_audience: Optional[str] = None
+
+    proposal_approval_doc: Optional[str] = None
+    circular_notice_doc: Optional[str] = None
+    circular_ref_no: Optional[str] = None
+    event_poster_doc: Optional[str] = None
+    registration_link: Optional[str] = None
+    registration_qr_doc: Optional[str] = None
+    resource_person_details: Optional[str] = None
+    invitation_letter_doc: Optional[str] = None
+    guest_details: Optional[str] = None
+
+    approved_budget_doc: Optional[str] = None
+    budget_particulars: Optional[List[Dict[str, Any]]] = []
+    total_budget_amount: Optional[float] = 0.0
+    expense_bills_doc: Optional[str] = None
+    total_budget: Optional[float] = 0.0
+    total_expenses: Optional[float] = 0.0
+    total_budget_words: Optional[str] = None
+    total_expense_words: Optional[str] = None
+    minute_to_minute: Optional[List[Dict[str, Any]]] = []
+    participants_gu_students: Optional[int] = 0
+    participants_gu_faculty: Optional[int] = 0
+    participants_external: Optional[int] = 0
+    participants_total: Optional[int] = 0
+
+    attendees_list_doc: Optional[str] = None
+    event_photos: Optional[List[Dict[str, Any]]] = []
+    prize_winners: Optional[List[Dict[str, Any]]] = []
+    utilization_items: Optional[List[Dict[str, Any]]] = []
+    learning_outcome: Optional[str] = None
+
+    newspaper_name: Optional[str] = None
+    press_release_doc: Optional[str] = None
+    feedback_guest: Optional[str] = None
+    feedback_participants: Optional[str] = None
+    coordinator_signature: Optional[str] = None
+    head_of_school_signature: Optional[str] = None
+    dsw_verified_by: Optional[str] = None
+
+    created_by: int
+    creator_name: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
