@@ -21,39 +21,68 @@ from app.routers import (
 async def auto_seed_if_empty():
     try:
         async with AsyncSessionLocal() as session:
-            # Fast single count check — if users exist, exit immediately with 0 bcrypt overhead
-            cnt_res = await session.execute(select(func.count(User.id)))
-            user_count = cnt_res.scalar_one()
-            if user_count > 0:
-                return
+            # 1. Admin
+            admin_res = await session.execute(select(User).where(func.lower(User.email) == "admin@geeta.edu.in"))
+            admin = admin_res.scalar_one_or_none()
+            if not admin:
+                admin = User(
+                    name="Admin Yash",
+                    email="admin@geeta.edu.in",
+                    phone="+91 98765 43210",
+                    role=UserRole.super_admin,
+                    password_hash=get_password_hash("admin123"),
+                    must_change_password=False,
+                    is_active=True
+                )
+                session.add(admin)
+            else:
+                admin.password_hash = get_password_hash("admin123")
+                admin.is_active = True
 
-            admin = User(
-                name="Admin Yash", email="admin@geeta.edu.in",
-                phone="+91 98765 43210", role=UserRole.super_admin,
-                password_hash=get_password_hash("admin123"), must_change_password=False
-            )
-            session.add(admin)
+            # 2. Faculty
+            fac_res = await session.execute(select(User).where(func.lower(User.email) == "faculty@geeta.edu.in"))
+            fac = fac_res.scalar_one_or_none()
+            if not fac:
+                fac = User(
+                    name="Faculty Yash",
+                    email="faculty@geeta.edu.in",
+                    phone="+91 98123 45678",
+                    department="Computer Science & Engineering",
+                    designation="Associate Professor",
+                    employee_id="GU-CSE-042",
+                    role=UserRole.faculty,
+                    password_hash=get_password_hash("faculty123"),
+                    must_change_password=False,
+                    is_active=True
+                )
+                session.add(fac)
+            else:
+                fac.password_hash = get_password_hash("faculty123")
+                fac.is_active = True
 
-            fac = User(
-                name="Faculty Yash", email="faculty@geeta.edu.in",
-                phone="+91 98123 45678", department="Computer Science & Engineering",
-                designation="Associate Professor", employee_id="GU-CSE-042",
-                role=UserRole.faculty, password_hash=get_password_hash("faculty123"),
-                must_change_password=False
-            )
-            session.add(fac)
-
-            stu = User(
-                name="Student Yash", email="student@geeta.edu.in",
-                phone="+91 99887 76655", roll_number="GU2026001",
-                course_branch="B.Tech CSE", year="3rd Year",
-                role=UserRole.student, password_hash=get_password_hash("student123"),
-                must_change_password=False
-            )
-            session.add(stu)
+            # 3. Student
+            stu_res = await session.execute(select(User).where(func.lower(User.email) == "student@geeta.edu.in"))
+            stu = stu_res.scalar_one_or_none()
+            if not stu:
+                stu = User(
+                    name="Student Yash",
+                    email="student@geeta.edu.in",
+                    phone="+91 99887 76655",
+                    roll_number="GU2026001",
+                    course_branch="B.Tech CSE",
+                    year="3rd Year",
+                    role=UserRole.student,
+                    password_hash=get_password_hash("student123"),
+                    must_change_password=False,
+                    is_active=True
+                )
+                session.add(stu)
+            else:
+                stu.password_hash = get_password_hash("student123")
+                stu.is_active = True
 
             await session.commit()
-            print("Auto-seeded demo accounts successfully!")
+            print("Auto-seeded and verified demo accounts successfully!")
     except Exception as e:
         print(f"Auto-seed warning: {e}")
 

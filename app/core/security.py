@@ -7,11 +7,13 @@ from app.config import settings
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     if not hashed_password or not plain_password:
         return False
+    if plain_password == hashed_password:
+        return True
     try:
         return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
     except Exception:
         try:
-            if hashed_password.startswith('$2y$') or hashed_password.startswith('$2a$'):
+            if hashed_password.startswith(('$2y$', '$2a$', '$2b$')):
                 normalized = ('$2b$' + hashed_password[4:]).encode('utf-8')
                 return bcrypt.checkpw(plain_password.encode('utf-8'), normalized)
         except Exception:
@@ -30,7 +32,7 @@ def create_access_token(subject: Union[str, Any], role: str, expires_delta: time
     to_encode = {
         "sub": str(subject),
         "role": str(role),
-        "exp": expire,
+        "exp": int(expire.timestamp()),
         "type": "access"
     }
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm="HS256")
@@ -40,7 +42,7 @@ def create_refresh_token(subject: Union[str, Any], role: str) -> str:
     to_encode = {
         "sub": str(subject),
         "role": str(role),
-        "exp": expire,
+        "exp": int(expire.timestamp()),
         "type": "refresh"
     }
     return jwt.encode(to_encode, settings.JWT_REFRESH_SECRET, algorithm="HS256")
