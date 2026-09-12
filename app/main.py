@@ -13,7 +13,7 @@ from app.core.security import get_password_hash
 from app.database import AsyncSessionLocal, Base, engine
 from app.models.all_models import User, UserRole
 from app.routers import (
-    announcements, auth, clubs, committees, dashboard, duty_charts,
+    ai, announcements, auth, clubs, committees, dashboard, duty_charts,
     event_reports, events, feedback, forms, leaderboard_staff, leaderboard_student,
     notifications, queries, tasks, uploads, users,
 )
@@ -220,6 +220,7 @@ app.include_router(uploads.router)
 app.include_router(duty_charts.router)
 app.include_router(committees.router)
 app.include_router(clubs.router)
+app.include_router(ai.router)
 
 # Mount static uploads directory for direct access to uploaded images/proofs
 if os.path.exists(settings.UPLOAD_DIR):

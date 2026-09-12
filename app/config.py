@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "/tmp/uploads"
     GOOGLE_SERVICE_ACCOUNT_JSON_BASE64: Optional[str] = None
     BLOB_READ_WRITE_TOKEN: Optional[str] = None
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
