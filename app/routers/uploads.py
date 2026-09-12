@@ -1,6 +1,6 @@
 import os
 import uuid
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Request
 from app.config import settings
 from app.core.deps import get_current_user
 from app.models.all_models import User
@@ -12,6 +12,7 @@ MAX_FILE_SIZE = 15 * 1024 * 1024 # 15 MB
 
 @router.post("")
 async def upload_file(
+    request: Request,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user)
 ):
@@ -29,7 +30,8 @@ async def upload_file(
     with open(filepath, "wb") as f:
         f.write(contents)
 
-    file_url = f"/uploads/{filename}"
+    base_url = str(request.base_url).rstrip('/')
+    file_url = f"{base_url}/uploads/{filename}"
 
     return {
         "file_url": file_url,
