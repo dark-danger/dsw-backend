@@ -12,32 +12,42 @@ router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
-    clean_email = payload.email.strip().lower()
-    clean_pass = payload.password.strip()
-    
-    result = await db.execute(select(User).where(func.lower(User.email) == clean_email))
-    user = result.scalar_one_or_none()
-    
-    if not user or not verify_password(clean_pass, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password"
-        )
-    
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is disabled"
-        )
+    try:
+        clean_email = payload.email.strip().lower()
+        clean_pass = payload.password.strip()
+        
+        result = await db.execute(select(User).where(func.lower(User.email) == clean_email))
+        user = result.scalar_one_or_none()
+        
+        if not user or not verify_password(clean_pass, user.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password"
+            )
+        
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is disabled"
+            )
 
-    access_token = create_access_token(subject=user.id, role=user.role.value)
-    refresh_token = create_refresh_token(subject=user.id, role=user.role.value)
+        access_token = create_access_token(subject=user.id, role=user.role.value if hasattr(user.role, 'value') else str(user.role))
+        refresh_token = create_refresh_token(subject=user.id, role=user.role.value if hasattr(user.role, 'value') else str(user.role))
 
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        user=UserOut.model_validate(user)
-    )
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            user=UserOut.model_validate(user)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Login Error: {str(e)}"
+        )
 
 @router.post("/refresh")
 async def refresh_token_endpoint(refresh_token: str, db: AsyncSession = Depends(get_db)):

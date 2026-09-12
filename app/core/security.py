@@ -5,9 +5,17 @@ import bcrypt
 from app.config import settings
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    if not hashed_password or not plain_password:
+        return False
     try:
         return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
     except Exception:
+        try:
+            if hashed_password.startswith('$2y$') or hashed_password.startswith('$2a$'):
+                normalized = ('$2b$' + hashed_password[4:]).encode('utf-8')
+                return bcrypt.checkpw(plain_password.encode('utf-8'), normalized)
+        except Exception:
+            pass
         return False
 
 def get_password_hash(password: str) -> str:
@@ -21,7 +29,7 @@ def create_access_token(subject: Union[str, Any], role: str, expires_delta: time
     
     to_encode = {
         "sub": str(subject),
-        "role": role,
+        "role": str(role),
         "exp": expire,
         "type": "access"
     }
@@ -31,7 +39,7 @@ def create_refresh_token(subject: Union[str, Any], role: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode = {
         "sub": str(subject),
-        "role": role,
+        "role": str(role),
         "exp": expire,
         "type": "refresh"
     }
