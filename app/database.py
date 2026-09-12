@@ -1,3 +1,4 @@
+import os
 import re
 import ssl as _ssl
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -7,9 +8,9 @@ from app.config import settings
 db_url = settings.DATABASE_URL
 
 if not db_url:
-    # Provide a dummy URL just to allow the module to load without throwing an ArgumentError.
-    # The middleware will catch the missing URL and throw a proper HTTP 500 error.
-    db_url = "sqlite+aiosqlite:///:memory:"
+    # Use a persistent SQLite file shared by all async sessions
+    db_path = "/tmp/dsw_portal.db" if os.path.exists("/tmp") else os.path.abspath("dsw_portal.db")
+    db_url = f"sqlite+aiosqlite:///{db_path}"
 
 # Convert postgres:// or postgresql:// to postgresql+asyncpg://
 if db_url.startswith("postgres://"):
