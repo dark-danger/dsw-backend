@@ -110,9 +110,14 @@ async def db_init_middleware(request: Request, call_next):
     try:
         await ensure_db_initialized()
     except Exception as e:
+        import traceback
         return JSONResponse(
             status_code=500,
-            content={"detail": str(e), "error_type": "DatabaseConfigurationError"},
+            content={
+                "detail": f"Database initialization failed: {str(e)}",
+                "error_type": type(e).__name__,
+                "traceback": traceback.format_exc()
+            },
             headers={
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "*",
@@ -126,10 +131,15 @@ async def db_init_middleware(request: Request, call_next):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
     print(f"Global Exception: {exc}")
     return JSONResponse(
         status_code=500,
-        content={"detail": str(exc), "error_type": type(exc).__name__},
+        content={
+            "detail": str(exc),
+            "error_type": type(exc).__name__,
+            "traceback": traceback.format_exc()
+        },
         headers={
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "*",
