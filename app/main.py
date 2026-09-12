@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.config import settings
 from app.core.security import get_password_hash
@@ -20,48 +20,39 @@ from app.routers import (
 async def auto_seed_if_empty():
     try:
         async with AsyncSessionLocal() as session:
-            res_admin = await session.execute(select(User).where(User.email == "admin@geeta.edu.in"))
-            admin = res_admin.scalar_one_or_none()
-            if not admin:
-                admin = User(
-                    name="Admin Yash", email="admin@geeta.edu.in",
-                    phone="+91 98765 43210", role=UserRole.super_admin,
-                    password_hash=get_password_hash("admin123"), must_change_password=False
-                )
-                session.add(admin)
-            else:
-                admin.password_hash = get_password_hash("admin123")
+            # Fast single count check — if users exist, exit immediately with 0 bcrypt overhead
+            cnt_res = await session.execute(select(func.count(User.id)))
+            user_count = cnt_res.scalar_one()
+            if user_count > 0:
+                return
 
-            res_fac = await session.execute(select(User).where(User.email == "faculty@geeta.edu.in"))
-            fac = res_fac.scalar_one_or_none()
-            if not fac:
-                fac = User(
-                    name="Faculty Yash", email="faculty@geeta.edu.in",
-                    phone="+91 98123 45678", department="Computer Science & Engineering",
-                    designation="Associate Professor", employee_id="GU-CSE-042",
-                    role=UserRole.faculty, password_hash=get_password_hash("faculty123"),
-                    must_change_password=False
-                )
-                session.add(fac)
-            else:
-                fac.password_hash = get_password_hash("faculty123")
+            admin = User(
+                name="Admin Yash", email="admin@geeta.edu.in",
+                phone="+91 98765 43210", role=UserRole.super_admin,
+                password_hash=get_password_hash("admin123"), must_change_password=False
+            )
+            session.add(admin)
 
-            res_stu = await session.execute(select(User).where(User.email == "student@geeta.edu.in"))
-            stu = res_stu.scalar_one_or_none()
-            if not stu:
-                stu = User(
-                    name="Student Yash", email="student@geeta.edu.in",
-                    phone="+91 99887 76655", roll_number="GU2026001",
-                    course_branch="B.Tech CSE", year="3rd Year",
-                    role=UserRole.student, password_hash=get_password_hash("student123"),
-                    must_change_password=False
-                )
-                session.add(stu)
-            else:
-                stu.password_hash = get_password_hash("student123")
+            fac = User(
+                name="Faculty Yash", email="faculty@geeta.edu.in",
+                phone="+91 98123 45678", department="Computer Science & Engineering",
+                designation="Associate Professor", employee_id="GU-CSE-042",
+                role=UserRole.faculty, password_hash=get_password_hash("faculty123"),
+                must_change_password=False
+            )
+            session.add(fac)
+
+            stu = User(
+                name="Student Yash", email="student@geeta.edu.in",
+                phone="+91 99887 76655", roll_number="GU2026001",
+                course_branch="B.Tech CSE", year="3rd Year",
+                role=UserRole.student, password_hash=get_password_hash("student123"),
+                must_change_password=False
+            )
+            session.add(stu)
 
             await session.commit()
-            print("Auto-seeded & synchronized demo accounts successfully!")
+            print("Auto-seeded demo accounts successfully!")
     except Exception as e:
         print(f"Auto-seed warning: {e}")
 
@@ -80,7 +71,7 @@ async def ensure_db_initialized():
             _db_initialized = True
             print("DB and Seed initialized successfully.")
         except Exception as e:
-            print(f"Error initializing DB in serverless: {e}")
+            print(f"Error initializing DB: {e}")
             raise e
 
 app = FastAPI(
@@ -100,8 +91,8 @@ app.add_middleware(
 
 @app.middleware("http")
 async def db_init_middleware(request: Request, call_next):
-    if request.method == "OPTIONS":
-        # Preflight requests should bypass DB initialization to avoid CORS errors if DB is down or unconfigured
+    # Preflight requests and lightweight health/docs routes bypass DB initialization for maximum speed
+    if request.method == "OPTIONS" or request.url.path in ["/", "/health", "/docs", "/openapi.json"]:
         return await call_next(request)
         
     try:
@@ -125,9 +116,6 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Vercel serverless handles static files differently; uploads are typically served via cloud storage in prod.
-# Local uploads directory creation is skipped for Vercel deployment.
-
 # Mount all domain routers
 app.include_router(auth.router)
 app.include_router(users.router)
@@ -145,6 +133,14 @@ app.include_router(uploads.router)
 app.include_router(duty_charts.router)
 app.include_router(committees.router)
 
+
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "service": "DSW API",
+        "db_initialized": _db_initialized
+    }
 
 @app.get("/")
 async def root():

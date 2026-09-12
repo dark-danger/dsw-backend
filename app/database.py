@@ -44,11 +44,23 @@ elif db_url.startswith("sqlite"):
 
 print(f"[DB] Using: {db_url[:40]}...")
 
+engine_kwargs = {
+    "echo": False,
+    "connect_args": connect_args,
+    "pool_pre_ping": True,
+}
+
+if db_url.startswith("postgresql"):
+    engine_kwargs.update({
+        "pool_size": 5,
+        "max_overflow": 10,
+        "pool_recycle": 300,
+        "pool_timeout": 10.0,
+    })
+
 engine = create_async_engine(
     db_url,
-    echo=False,
-    connect_args=connect_args,
-    pool_pre_ping=True
+    **engine_kwargs
 )
 
 AsyncSessionLocal = async_sessionmaker(

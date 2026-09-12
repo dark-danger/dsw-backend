@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case
 from typing import List
 from app.database import get_db
 from app.core.deps import get_current_user
@@ -9,46 +9,60 @@ from app.schemas.schemas import StaffRankingOut
 
 router = APIRouter(prefix="/api/leaderboard/staff", tags=["Staff Leaderboard"])
 
-def _get_status_str(status_val) -> str:
-    if hasattr(status_val, "value"):
-        return str(status_val.value)
-    return str(status_val)
-
 @router.get("/rankings", response_model=List[StaffRankingOut])
 async def get_staff_rankings(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    faculty_res = await db.execute(select(User).where(User.role == UserRole.faculty, User.is_active == True))
+    faculty_res = await db.execute(
+        select(User).where(User.role == UserRole.faculty, User.is_active == True).order_by(User.name)
+    )
     faculty_members = faculty_res.scalars().all()
+    if not faculty_members:
+        return []
+
+    # Aggregated performance scores in a single query
+    scores_res = await db.execute(
+        select(
+            FacultyPerformanceLedger.faculty_id,
+            func.coalesce(func.sum(FacultyPerformanceLedger.score_delta), 0).label("total_score")
+        )
+        .group_by(FacultyPerformanceLedger.faculty_id)
+    )
+    scores_map = {row.faculty_id: int(row.total_score or 0) for row in scores_res.all()}
+
+    # Aggregated task counts in a single query
+    tasks_res = await db.execute(
+        select(
+            Task.assigned_to,
+            func.count(case((Task.status == TaskStatus.approved, 1))).label("approved"),
+            func.count(case((Task.status.in_([TaskStatus.pending, TaskStatus.in_progress, TaskStatus.submitted]), 1))).label("pending"),
+            func.count(case((Task.status == TaskStatus.declined, 1))).label("declined")
+        )
+        .where(Task.assigned_to.is_not(None))
+        .group_by(Task.assigned_to)
+    )
+    tasks_map = {
+        row.assigned_to: {
+            "approved": int(row.approved or 0),
+            "pending": int(row.pending or 0),
+            "declined": int(row.declined or 0)
+        }
+        for row in tasks_res.all()
+    }
 
     rankings = []
     for f in faculty_members:
-        # SUM score_delta from ledger
-        score_res = await db.execute(
-            select(func.coalesce(func.sum(FacultyPerformanceLedger.score_delta), 0)).where(
-                FacultyPerformanceLedger.faculty_id == f.id
-            )
-        )
-        total_score = score_res.scalar_one()
-
-        # Task counts
-        tasks_res = await db.execute(select(Task).where(Task.assigned_to == f.id))
-        f_tasks = tasks_res.scalars().all()
-
-        approved = sum(1 for t in f_tasks if _get_status_str(t.status) == "approved")
-        pending = sum(1 for t in f_tasks if _get_status_str(t.status) in ["pending", "in_progress", "submitted"])
-        declined = sum(1 for t in f_tasks if _get_status_str(t.status) == "declined")
-
+        t_counts = tasks_map.get(f.id, {"approved": 0, "pending": 0, "declined": 0})
         rankings.append({
             "faculty_id": f.id,
             "name": f.name,
             "department": f.department or "DSW",
             "designation": f.designation or "Faculty",
-            "total_score": total_score,
-            "tasks_approved": approved,
-            "tasks_pending": pending,
-            "tasks_declined": declined
+            "total_score": scores_map.get(f.id, 0),
+            "tasks_approved": t_counts["approved"],
+            "tasks_pending": t_counts["pending"],
+            "tasks_declined": t_counts["declined"]
         })
 
     # Sort descending by total_score, tie breaker by tasks_approved
@@ -60,3 +74,4 @@ async def get_staff_rankings(
         result.append(StaffRankingOut(**r))
 
     return result
+

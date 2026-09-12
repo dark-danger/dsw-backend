@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case
 from sqlalchemy.orm import selectinload
 from typing import List
 from app.database import get_db
@@ -19,60 +19,83 @@ async def get_dashboard_summary(
     current_user: User = Depends(require_role([UserRole.super_admin])),
     db: AsyncSession = Depends(get_db)
 ):
-    # Faculty & Student count
-    fac_cnt = (await db.execute(select(func.count(User.id)).where(User.role == UserRole.faculty, User.is_active == True))).scalar_one()
-    stu_cnt = (await db.execute(select(func.count(User.id)).where(User.role == UserRole.student, User.is_active == True))).scalar_one()
+    # 1. Faculty & Student count in a single query
+    user_counts = (await db.execute(
+        select(
+            func.count(case((User.role == UserRole.faculty, 1))).label("faculty_cnt"),
+            func.count(case((User.role == UserRole.student, 1))).label("student_cnt")
+        ).where(User.is_active == True)
+    )).one()
 
-    # Events count & breakdown
-    ev_cnt = (await db.execute(select(func.count(Event.id)))).scalar_one()
-    ev_planned = (await db.execute(select(func.count(Event.id)).where(Event.status == "planned"))).scalar_one()
-    ev_ongoing = (await db.execute(select(func.count(Event.id)).where(Event.status == "ongoing"))).scalar_one()
-    ev_completed = (await db.execute(select(func.count(Event.id)).where(Event.status == "completed"))).scalar_one()
+    # 2. Events count & breakdown in a single query
+    event_counts = (await db.execute(
+        select(
+            func.count(Event.id).label("total"),
+            func.count(case((Event.status == "planned", 1))).label("planned"),
+            func.count(case((Event.status == "ongoing", 1))).label("ongoing"),
+            func.count(case((Event.status == "completed", 1))).label("completed")
+        )
+    )).one()
 
-    # Tasks count & breakdown
-    task_cnt = (await db.execute(select(func.count(Task.id)))).scalar_one()
-    task_pending = (await db.execute(select(func.count(Task.id)).where(Task.status.in_(["pending", "in_progress"])))).scalar_one()
-    task_submitted = (await db.execute(select(func.count(Task.id)).where(Task.status == "submitted"))).scalar_one()
-    task_approved = (await db.execute(select(func.count(Task.id)).where(Task.status == "approved"))).scalar_one()
-    task_declined = (await db.execute(select(func.count(Task.id)).where(Task.status == "declined"))).scalar_one()
+    # 3. Tasks count & breakdown in a single query
+    task_counts = (await db.execute(
+        select(
+            func.count(Task.id).label("total"),
+            func.count(case((Task.status.in_([TaskStatus.pending, TaskStatus.in_progress]), 1))).label("pending"),
+            func.count(case((Task.status == TaskStatus.submitted, 1))).label("submitted"),
+            func.count(case((Task.status == TaskStatus.approved, 1))).label("approved"),
+            func.count(case((Task.status == TaskStatus.declined, 1))).label("declined")
+        )
+    )).one()
 
-    # Queries count & breakdown
-    q_cnt = (await db.execute(select(func.count(QueryItem.id)))).scalar_one()
-    q_open = (await db.execute(select(func.count(QueryItem.id)).where(QueryItem.status == "open"))).scalar_one()
-    q_closed = (await db.execute(select(func.count(QueryItem.id)).where(QueryItem.status == "closed"))).scalar_one()
+    # 4. Queries count & breakdown in a single query
+    query_counts = (await db.execute(
+        select(
+            func.count(QueryItem.id).label("total"),
+            func.count(case((QueryItem.status == "open", 1))).label("open"),
+            func.count(case((QueryItem.status == "closed", 1))).label("closed")
+        )
+    )).one()
 
-    # Announcements
+    # 5. Announcements, Forms, Feedback, Points
     ann_cnt = (await db.execute(select(func.count(Announcement.id)))).scalar_one()
-
-    # Dynamic Forms & Responses
     df_cnt = (await db.execute(select(func.count(DynamicForm.id)))).scalar_one()
     df_resp_cnt = (await db.execute(select(func.count(DynamicFormResponse.id)))).scalar_one()
-
-    # Feedback Forms & Responses
     fb_cnt = (await db.execute(select(func.count(FeedbackForm.id)))).scalar_one()
     fb_resp_cnt = (await db.execute(select(func.count(FeedbackResponse.id)))).scalar_one()
-
-    # Student Points Total
     total_pts = (await db.execute(select(func.coalesce(func.sum(StudentPointsLedger.points), 0)))).scalar_one()
 
     return DashboardSummaryOut(
-        total_faculty=fac_cnt,
-        total_students=stu_cnt,
-        total_events=ev_cnt,
-        events_breakdown={"planned": ev_planned, "ongoing": ev_ongoing, "completed": ev_completed},
-        total_tasks=task_cnt,
-        tasks_breakdown={"pending": task_pending, "submitted": task_submitted, "approved": task_approved, "declined": task_declined},
-        total_queries=q_cnt,
-        queries_breakdown={"open": q_open, "closed": q_closed},
-        total_announcements=ann_cnt,
-        total_dynamic_forms=df_cnt,
-        total_form_responses=df_resp_cnt,
-        total_feedback_forms=fb_cnt,
-        total_feedback_responses=fb_resp_cnt,
-        total_student_points_awarded=total_pts
+        total_faculty=int(user_counts.faculty_cnt or 0),
+        total_students=int(user_counts.student_cnt or 0),
+        total_events=int(event_counts.total or 0),
+        events_breakdown={
+            "planned": int(event_counts.planned or 0),
+            "ongoing": int(event_counts.ongoing or 0),
+            "completed": int(event_counts.completed or 0)
+        },
+        total_tasks=int(task_counts.total or 0),
+        tasks_breakdown={
+            "pending": int(task_counts.pending or 0),
+            "submitted": int(task_counts.submitted or 0),
+            "approved": int(task_counts.approved or 0),
+            "declined": int(task_counts.declined or 0)
+        },
+        total_queries=int(query_counts.total or 0),
+        queries_breakdown={
+            "open": int(query_counts.open or 0),
+            "closed": int(query_counts.closed or 0)
+        },
+        total_announcements=int(ann_cnt or 0),
+        total_dynamic_forms=int(df_cnt or 0),
+        total_form_responses=int(df_resp_cnt or 0),
+        total_feedback_forms=int(fb_cnt or 0),
+        total_feedback_responses=int(fb_resp_cnt or 0),
+        total_student_points_awarded=int(total_pts or 0)
     )
 
 @router.get("/activity", response_model=List[AuditLogOut])
+@router.get("/recent-activity", response_model=List[AuditLogOut])
 async def get_recent_activity_feed(
     current_user: User = Depends(require_role([UserRole.super_admin])),
     db: AsyncSession = Depends(get_db)

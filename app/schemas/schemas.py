@@ -62,6 +62,16 @@ class StudentImportRow(BaseModel):
     year: str
     phone: Optional[str] = None
 
+class PeriodStats(BaseModel):
+    total_assigned: int
+    completed_approved: int
+    pending_count: int
+    declined_count: int
+    completion_rate_percentage: float
+    performance_score: int
+    period_label: str
+    reset_date: Optional[str] = None
+
 class FacultyStatsOut(BaseModel):
     faculty_id: int
     faculty_name: str
@@ -71,6 +81,9 @@ class FacultyStatsOut(BaseModel):
     declined_count: int
     completion_rate_percentage: float
     performance_score: int
+    weekly: Optional[PeriodStats] = None
+    monthly: Optional[PeriodStats] = None
+    all_time: Optional[PeriodStats] = None
 
 
 # --- TASK SCHEMAS ---

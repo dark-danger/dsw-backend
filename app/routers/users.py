@@ -6,7 +6,8 @@ from app.database import get_db
 from app.core.security import get_password_hash
 from app.core.deps import require_role, get_current_user
 from app.models.all_models import User, UserRole, Task, TaskStatus, FacultyPerformanceLedger
-from app.schemas.schemas import UserOut, FacultyCreate, FacultyUpdate, StudentImportRow, FacultyStatsOut
+from datetime import datetime, timezone, timedelta
+from app.schemas.schemas import UserOut, FacultyCreate, FacultyUpdate, StudentImportRow, FacultyStatsOut, PeriodStats
 from app.services.notification_service import log_audit
 
 router = APIRouter(prefix="/api/users", tags=["Users & Faculty"])
@@ -72,36 +73,36 @@ async def get_faculty(
         raise HTTPException(status_code=404, detail="Faculty member not found")
     return UserOut.model_validate(faculty)
 
-@router.patch("/faculty/{faculty_id}", response_model=UserOut)
+@router.put("/faculty/{faculty_id}", response_model=UserOut)
 async def update_faculty(
     faculty_id: int,
     payload: FacultyUpdate,
     current_user: User = Depends(require_role([UserRole.super_admin])),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(User).where(User.id == faculty_id))
+    result = await db.execute(select(User).where(User.id == faculty_id, User.role == UserRole.faculty))
     faculty = result.scalar_one_or_none()
     if not faculty:
         raise HTTPException(status_code=404, detail="Faculty member not found")
-        
+
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(faculty, k, v)
-        
+
     await db.commit()
     await db.refresh(faculty)
     return UserOut.model_validate(faculty)
 
 @router.delete("/faculty/{faculty_id}")
-async def soft_delete_faculty(
+async def delete_faculty(
     faculty_id: int,
     current_user: User = Depends(require_role([UserRole.super_admin])),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(User).where(User.id == faculty_id))
+    result = await db.execute(select(User).where(User.id == faculty_id, User.role == UserRole.faculty))
     faculty = result.scalar_one_or_none()
     if not faculty:
         raise HTTPException(status_code=404, detail="Faculty member not found")
-        
+
     faculty.is_active = False
     await db.commit()
     return {"message": "Faculty deactivated"}
@@ -110,6 +111,14 @@ def _get_status_str(status_val) -> str:
     if hasattr(status_val, "value"):
         return str(status_val.value)
     return str(status_val)
+
+def _calc_stats(tasks):
+    total = len(tasks)
+    approved = sum(1 for t in tasks if _get_status_str(t.status) == "approved")
+    pending = sum(1 for t in tasks if _get_status_str(t.status) in ["pending", "in_progress", "submitted"])
+    declined = sum(1 for t in tasks if _get_status_str(t.status) == "declined")
+    rate = round((approved / total * 100), 1) if total > 0 else 0.0
+    return total, approved, pending, declined, rate
 
 @router.get("/faculty/{faculty_id}/stats", response_model=FacultyStatsOut)
 async def get_faculty_stats(
@@ -124,27 +133,102 @@ async def get_faculty_stats(
 
     tasks_res = await db.execute(select(Task).where(Task.assigned_to == faculty_id))
     all_tasks = tasks_res.scalars().all()
-    
-    total_assigned = len(all_tasks)
-    approved = sum(1 for t in all_tasks if _get_status_str(t.status) == "approved")
-    pending = sum(1 for t in all_tasks if _get_status_str(t.status) in ["pending", "in_progress", "submitted"])
-    declined = sum(1 for t in all_tasks if _get_status_str(t.status) == "declined")
-    rate = round((approved / total_assigned * 100), 1) if total_assigned > 0 else 0.0
 
+    now = datetime.now(timezone.utc)
+
+    # 1. Weekly Window (Last 7 days)
+    week_start = now - timedelta(days=7)
+    weekly_tasks = [t for t in all_tasks if t.created_at and (t.created_at.replace(tzinfo=timezone.utc) if t.created_at.tzinfo is None else t.created_at) >= week_start]
+    w_tot, w_app, w_pen, w_dec, w_rate = _calc_stats(weekly_tasks)
+
+    w_score_res = await db.execute(
+        select(func.coalesce(func.sum(FacultyPerformanceLedger.score_delta), 0))
+        .where(FacultyPerformanceLedger.faculty_id == faculty_id, FacultyPerformanceLedger.created_at >= week_start)
+    )
+    w_score = w_score_res.scalar_one()
+
+    # 2. Monthly Window (Resets on the 9th of every month)
+    if now.day >= 9:
+        month_start = datetime(now.year, now.month, 9, 0, 0, 0, tzinfo=timezone.utc)
+        if now.month == 12:
+            next_reset = datetime(now.year + 1, 1, 9, 0, 0, 0, tzinfo=timezone.utc)
+        else:
+            next_reset = datetime(now.year, now.month + 1, 9, 0, 0, 0, tzinfo=timezone.utc)
+    else:
+        if now.month == 1:
+            month_start = datetime(now.year - 1, 12, 9, 0, 0, 0, tzinfo=timezone.utc)
+        else:
+            month_start = datetime(now.year, now.month - 1, 9, 0, 0, 0, tzinfo=timezone.utc)
+        next_reset = datetime(now.year, now.month, 9, 0, 0, 0, tzinfo=timezone.utc)
+
+    monthly_tasks = [
+        t for t in all_tasks
+        if t.created_at and
+        (t.created_at.replace(tzinfo=timezone.utc) if t.created_at.tzinfo is None else t.created_at) >= month_start and
+        (t.created_at.replace(tzinfo=timezone.utc) if t.created_at.tzinfo is None else t.created_at) < next_reset
+    ]
+    m_tot, m_app, m_pen, m_dec, m_rate = _calc_stats(monthly_tasks)
+
+    m_score_res = await db.execute(
+        select(func.coalesce(func.sum(FacultyPerformanceLedger.score_delta), 0))
+        .where(
+            FacultyPerformanceLedger.faculty_id == faculty_id,
+            FacultyPerformanceLedger.created_at >= month_start,
+            FacultyPerformanceLedger.created_at < next_reset
+        )
+    )
+    m_score = m_score_res.scalar_one()
+
+    # 3. All-time stats
+    tot, app, pen, dec, rate = _calc_stats(all_tasks)
     score_res = await db.execute(
         select(func.coalesce(func.sum(FacultyPerformanceLedger.score_delta), 0)).where(FacultyPerformanceLedger.faculty_id == faculty_id)
     )
-    score = score_res.scalar_one()
+    all_time_score = score_res.scalar_one()
+
+    weekly_stats = PeriodStats(
+        total_assigned=w_tot,
+        completed_approved=w_app,
+        pending_count=w_pen,
+        declined_count=w_dec,
+        completion_rate_percentage=w_rate,
+        performance_score=w_score,
+        period_label=f"Weekly ({week_start.strftime('%d %b')} – {now.strftime('%d %b')})"
+    )
+
+    monthly_stats = PeriodStats(
+        total_assigned=m_tot,
+        completed_approved=m_app,
+        pending_count=m_pen,
+        declined_count=m_dec,
+        completion_rate_percentage=m_rate,
+        performance_score=m_score,
+        period_label=f"Monthly Cycle ({month_start.strftime('%d %b')} – {next_reset.strftime('%d %b')})",
+        reset_date=next_reset.strftime('%d %b %Y')
+    )
+
+    all_time_stats = PeriodStats(
+        total_assigned=tot,
+        completed_approved=app,
+        pending_count=pen,
+        declined_count=dec,
+        completion_rate_percentage=rate,
+        performance_score=all_time_score,
+        period_label="All-Time Record"
+    )
 
     return FacultyStatsOut(
         faculty_id=faculty.id,
         faculty_name=faculty.name,
-        total_assigned=total_assigned,
-        completed_approved=approved,
-        pending_count=pending,
-        declined_count=declined,
+        total_assigned=tot,
+        completed_approved=app,
+        pending_count=pen,
+        declined_count=dec,
         completion_rate_percentage=rate,
-        performance_score=score
+        performance_score=all_time_score,
+        weekly=weekly_stats,
+        monthly=monthly_stats,
+        all_time=all_time_stats
     )
 
 # --- STUDENT MANAGEMENT ---
@@ -155,6 +239,7 @@ async def bulk_import_students(
     db: AsyncSession = Depends(get_db)
 ):
     imported_count = 0
+    default_pwd_hash = get_password_hash("Student@123")
     for row in rows:
         existing = await db.execute(select(User).where((User.email == row.email) | (User.roll_number == row.roll_number)))
         if existing.scalar_one_or_none():
@@ -168,7 +253,7 @@ async def bulk_import_students(
             year=row.year,
             phone=row.phone,
             role=UserRole.student,
-            password_hash=get_password_hash("Student@123"),
+            password_hash=default_pwd_hash,
             must_change_password=True
         )
         db.add(student)

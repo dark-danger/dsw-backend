@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from datetime import datetime, timezone
@@ -294,49 +294,49 @@ async def get_student_rankings(
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
-    # Fetch all active students
-    students_res = await db.execute(select(User).where(User.role == UserRole.student, User.is_active == True))
-    students = students_res.scalars().all()
-
-    rankings = []
-    for s in students:
-        # Task points
-        t_pts_res = await db.execute(
-            select(func.coalesce(func.sum(StudentPointsLedger.points), 0)).where(
-                StudentPointsLedger.student_id == s.id,
-                StudentPointsLedger.source_type == "task_submission"
-            )
+    # Single high-performance grouped query with conditional aggregation
+    stmt = (
+        select(
+            User.id.label("student_id"),
+            User.name,
+            User.roll_number,
+            User.course_branch,
+            User.year,
+            func.coalesce(
+                func.sum(
+                    case((StudentPointsLedger.source_type == "task_submission", StudentPointsLedger.points), else_=0)
+                ), 0
+            ).label("task_points"),
+            func.coalesce(
+                func.sum(
+                    case((StudentPointsLedger.source_type == "manual_award", StudentPointsLedger.points), else_=0)
+                ), 0
+            ).label("manual_points"),
+            func.coalesce(func.sum(StudentPointsLedger.points), 0).label("total_points")
         )
-        task_pts = t_pts_res.scalar_one()
+        .outerjoin(StudentPointsLedger, User.id == StudentPointsLedger.student_id)
+        .where(User.role == UserRole.student, User.is_active == True)
+        .group_by(User.id, User.name, User.roll_number, User.course_branch, User.year)
+        .order_by(func.coalesce(func.sum(StudentPointsLedger.points), 0).desc(), User.name.asc())
+    )
 
-        # Manual points
-        m_pts_res = await db.execute(
-            select(func.coalesce(func.sum(StudentPointsLedger.points), 0)).where(
-                StudentPointsLedger.student_id == s.id,
-                StudentPointsLedger.source_type == "manual_award"
-            )
-        )
-        manual_pts = m_pts_res.scalar_one()
+    rows = (await db.execute(stmt)).all()
 
-        total = task_pts + manual_pts
-        rankings.append({
-            "student_id": s.id,
-            "name": s.name,
-            "roll_number": s.roll_number,
-            "course_branch": s.course_branch,
-            "year": s.year,
-            "total_points": total,
-            "task_points": task_pts,
-            "manual_points": manual_pts
-        })
-
-    # Sort descending by total_points
-    rankings.sort(key=lambda r: r["total_points"], reverse=True)
-
-    # Assign ranks
     result = []
-    for idx, r in enumerate(rankings):
-        r["rank"] = idx + 1
-        result.append(StudentRankingOut(**r))
+    for idx, row in enumerate(rows):
+        result.append(
+            StudentRankingOut(
+                student_id=row.student_id,
+                name=row.name,
+                roll_number=row.roll_number,
+                course_branch=row.course_branch,
+                year=row.year,
+                total_points=int(row.total_points or 0),
+                task_points=int(row.task_points or 0),
+                manual_points=int(row.manual_points or 0),
+                rank=idx + 1
+            )
+        )
 
     return result
+
