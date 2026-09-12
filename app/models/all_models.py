@@ -423,3 +423,54 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     actor = relationship("User", foreign_keys=[actor_id])
+
+
+# 10. STUDENT CLUBS & CLUB TASKS
+class Club(Base):
+    __tablename__ = "clubs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=True)
+    category: Mapped[str] = mapped_column(String(100), default="Technical") # Technical, Cultural, Literary, Sports, Social, Coding, Media
+    faculty_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    kras: Mapped[str] = mapped_column(Text, nullable=True) # Key result areas & annual objectives
+    roles_schema: Mapped[list] = mapped_column(JSON, default=list) # Array of configurable roles, e.g. ["President", "Vice President", "General Secretary", "Technical Lead", "Events Lead", "PR & Outreach Head"]
+    student_members: Mapped[list] = mapped_column(JSON, default=list) # Array of { id, student_id, name, email, roll_number, branch, semester, phone, role, is_core }
+    total_points: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    faculty_coordinator = relationship("User", foreign_keys=[faculty_id])
+    creator = relationship("User", foreign_keys=[created_by])
+    tasks = relationship("ClubTask", back_populates="club", cascade="all, delete-orphan")
+
+
+class ClubTask(Base):
+    __tablename__ = "club_tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    club_id: Mapped[int] = mapped_column(ForeignKey("clubs.id", ondelete="CASCADE"), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=True)
+    points_reward: Mapped[int] = mapped_column(Integer, default=20)
+    due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="pending") # pending, submitted, approved, declined
+    submission_text: Mapped[str] = mapped_column(Text, nullable=True)
+    file_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    submitted_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    review_remarks: Mapped[str] = mapped_column(Text, nullable=True)
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    club = relationship("Club", back_populates="tasks")
+    submitter = relationship("User", foreign_keys=[submitted_by])
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
+    creator = relationship("User", foreign_keys=[created_by])
+

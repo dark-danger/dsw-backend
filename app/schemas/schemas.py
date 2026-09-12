@@ -532,3 +532,108 @@ class CoreCommitteeOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+# --- STUDENT CLUBS SCHEMAS ---
+class ClubMemberSchema(BaseModel):
+    id: Optional[str] = None
+    student_id: Optional[int] = None
+    name: str
+    email: str
+    roll_number: Optional[str] = None
+    branch: Optional[str] = None
+    semester: Optional[str] = None
+    phone: Optional[str] = None
+    role: str
+    is_core: Optional[bool] = True
+
+class ClubCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    category: Optional[str] = "Technical"
+    faculty_id: int
+    kras: Optional[str] = None
+    roles_schema: List[str] = [
+        "President",
+        "Vice President",
+        "General Secretary",
+        "Technical Lead",
+        "Events Lead",
+        "PR & Outreach Head"
+    ]
+
+class ClubUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    faculty_id: Optional[int] = None
+    kras: Optional[str] = None
+    roles_schema: Optional[List[str]] = None
+    student_members: Optional[List[ClubMemberSchema]] = None
+    is_active: Optional[bool] = None
+
+class ClubOut(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    category: Optional[str] = "Technical"
+    faculty_id: Optional[int] = None
+    faculty_coordinator: Optional[UserOut] = None
+    kras: Optional[str] = None
+    roles_schema: List[str] = []
+    student_members: List[Dict[str, Any]] = []
+    total_points: int = 0
+    is_active: bool = True
+    created_by: int
+    created_at: datetime
+    tasks_count: int = 0
+    completed_tasks_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+class ClubTaskCreate(BaseModel):
+    club_id: int
+    title: str
+    description: Optional[str] = None
+    points_reward: int = 20
+    due_date: Optional[datetime] = None
+
+class ClubTaskSubmissionPayload(BaseModel):
+    submission_text: Optional[str] = None
+    file_url: Optional[str] = None
+
+class ClubTaskReviewPayload(BaseModel):
+    review_remarks: Optional[str] = None
+
+class ClubTaskOut(BaseModel):
+    id: int
+    club_id: int
+    club_name: Optional[str] = None
+    title: str
+    description: Optional[str] = None
+    points_reward: int
+    due_date: Optional[datetime] = None
+    status: str
+    submission_text: Optional[str] = None
+    file_url: Optional[str] = None
+    submitted_at: Optional[datetime] = None
+    submitted_by: Optional[int] = None
+    submitter_name: Optional[str] = None
+    reviewed_by: Optional[int] = None
+    review_remarks: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class ClubRankingOut(BaseModel):
+    rank: int
+    club_id: int
+    name: str
+    category: str
+    faculty_name: Optional[str] = None
+    total_points: int
+    tasks_completed: int
+    member_count: int
+
