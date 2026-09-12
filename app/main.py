@@ -11,10 +11,11 @@ from app.core.security import get_password_hash
 from app.database import AsyncSessionLocal, Base, engine
 from app.models.all_models import User, UserRole
 from app.routers import (
-    announcements, auth, committees, dashboard, duty_charts,
+    announcements, auth, clubs, committees, dashboard, duty_charts,
     events, feedback, forms, leaderboard_staff, leaderboard_student,
     notifications, queries, tasks, uploads, users,
 )
+
 
 
 async def auto_seed_if_empty():
@@ -132,6 +133,8 @@ app.include_router(notifications.router)
 app.include_router(uploads.router)
 app.include_router(duty_charts.router)
 app.include_router(committees.router)
+app.include_router(clubs.router)
+
 
 
 @app.get("/health")

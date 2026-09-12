@@ -532,3 +532,138 @@ class CoreCommitteeOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- UNIVERSITY CLUB SCHEMAS ---
+class ClubRoleSchema(BaseModel):
+    role_id: Optional[str] = None
+    role_name: str
+    student_id: Optional[int] = None
+    student_name: Optional[str] = None
+    roll_number: Optional[str] = None
+    email: Optional[str] = None
+    branch: Optional[str] = None
+    phone: Optional[str] = None
+    semester: Optional[str] = None
+    responsibilities: Optional[str] = None
+
+class ClubMemberSchema(BaseModel):
+    member_id: Optional[str] = None
+    student_id: Optional[int] = None
+    name: str
+    email: str
+    roll_number: Optional[str] = None
+    branch: Optional[str] = None
+    phone: Optional[str] = None
+    semester: Optional[str] = None
+    joined_at: Optional[str] = None
+
+class ClubCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    category: Optional[str] = "Technical"
+    kras: Optional[str] = None
+    faculty_coordinator_id: int
+    student_roles: List[Dict[str, Any]] = []
+    members: List[Dict[str, Any]] = []
+    logo_url: Optional[str] = None
+
+class ClubUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    kras: Optional[str] = None
+    faculty_coordinator_id: Optional[int] = None
+    student_roles: Optional[List[Dict[str, Any]]] = None
+    members: Optional[List[Dict[str, Any]]] = None
+    logo_url: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class ClubOut(BaseModel):
+    id: int
+    title: str
+    description: Optional[str] = None
+    category: str
+    kras: Optional[str] = None
+    faculty_coordinator_id: int
+    faculty_coordinator_name: Optional[str] = None
+    faculty_coordinator_dept: Optional[str] = None
+    faculty_coordinator_email: Optional[str] = None
+    faculty_coordinator_phone: Optional[str] = None
+    student_roles: List[Dict[str, Any]] = []
+    members: List[Dict[str, Any]] = []
+    logo_url: Optional[str] = None
+    total_points: int = 0
+    is_active: bool = True
+    created_by: int
+    creator_name: Optional[str] = None
+    created_at: datetime
+    tasks_count: int = 0
+    completed_tasks_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+class ClubTaskCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    points_value: int = 20
+    due_date: Optional[datetime] = None
+
+class ClubTaskOut(BaseModel):
+    id: int
+    club_id: int
+    club_title: Optional[str] = None
+    title: str
+    description: Optional[str] = None
+    points_value: int
+    due_date: Optional[datetime] = None
+    status: str
+    created_by: int
+    created_at: datetime
+    submissions_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+class ClubTaskSubmissionCreate(BaseModel):
+    submission_text: Optional[str] = None
+    file_url: Optional[str] = None
+
+class ClubTaskSubmissionOut(BaseModel):
+    id: int
+    club_task_id: int
+    task_title: Optional[str] = None
+    club_id: int
+    club_title: Optional[str] = None
+    submitted_by: int
+    submitter_name: Optional[str] = None
+    submitter_roll: Optional[str] = None
+    submission_text: Optional[str] = None
+    file_url: Optional[str] = None
+    submitted_at: datetime
+    status: str
+    points_awarded: Optional[int] = None
+    reviewed_by: Optional[int] = None
+    reviewed_at: Optional[datetime] = None
+    review_remarks: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class ClubRankingOut(BaseModel):
+    rank: int
+    club_id: int
+    title: str
+    category: str
+    faculty_coordinator_name: str
+    executive_count: int
+    members_count: int
+    tasks_completed: int
+    total_points: int
+
+class ClubManualPointsPayload(BaseModel):
+    club_id: int
+    points: int
+    reason_note: str
+
