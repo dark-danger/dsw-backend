@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any, Union
-from jose import jwt, JWTError
+import jwt
 import bcrypt
 from app.config import settings
 
@@ -8,13 +8,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
         return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
     except Exception:
-        # Fallback for passlib legacy hashes if any
-        try:
-            from passlib.context import CryptContext
-            pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-            return pwd_context.verify(plain_password, hashed_password)
-        except Exception:
-            return False
+        return False
 
 def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -47,5 +41,5 @@ def decode_token(token: str, secret: str = settings.JWT_SECRET) -> dict:
     try:
         payload = jwt.decode(token, secret, algorithms=["HS256"])
         return payload
-    except JWTError:
+    except Exception:
         return None
