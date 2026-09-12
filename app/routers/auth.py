@@ -10,6 +10,23 @@ from app.config import settings
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
+@router.get("/debug")
+async def auth_debug(db: AsyncSession = Depends(get_db)):
+    try:
+        user_res = await db.execute(select(User.id, User.email, User.role, User.is_active))
+        users = user_res.all()
+        return {
+            "status": "ok",
+            "users": [{"id": u[0], "email": u[1], "role": str(u[2]), "is_active": u[3]} for u in users]
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     try:
