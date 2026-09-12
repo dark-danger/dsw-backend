@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import select, func
 
 from app.config import settings
@@ -92,19 +92,38 @@ app.add_middleware(
 
 @app.middleware("http")
 async def db_init_middleware(request: Request, call_next):
-    # Preflight requests and lightweight health/docs routes bypass DB initialization for maximum speed
-    if request.method == "OPTIONS" or request.url.path in ["/", "/health", "/docs", "/openapi.json"]:
-        return await call_next(request)
+    # Preflight requests immediately return 200 OK with full CORS headers
+    if request.method == "OPTIONS":
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Max-Age": "86400",
+            }
+        )
         
+    if request.url.path in ["/", "/health", "/docs", "/openapi.json"]:
+        response = await call_next(request)
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        return response
+
     try:
         await ensure_db_initialized()
     except Exception as e:
         return JSONResponse(
             status_code=500,
             content={"detail": str(e), "error_type": "DatabaseConfigurationError"},
-            headers={"Access-Control-Allow-Origin": "*"}
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "*",
+                "Access-Control-Allow-Headers": "*"
+            }
         )
+        
     response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
     return response
 
 @app.exception_handler(Exception)
@@ -113,7 +132,11 @@ async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"detail": str(exc), "error_type": type(exc).__name__},
-        headers={"Access-Control-Allow-Origin": "*"}
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*"
+        }
     )
 
 
