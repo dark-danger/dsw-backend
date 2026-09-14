@@ -11,6 +11,7 @@ from app.schemas.schemas import EventCreate, EventUpdate, EventOut, TaskOut
 from app.services.pdf_report_service import generate_micro_report_html, generate_merged_report_html
 from app.services.notification_service import log_audit
 from app.routers.tasks import build_task_out
+from app.core.cache import ttl_cache
 
 router = APIRouter(prefix="/api/events", tags=["Events & Reports"])
 
@@ -66,6 +67,7 @@ async def create_event(
     await log_audit(db, action="CREATE_EVENT", entity_type="event", actor_id=current_user.id, entity_id=event.id, meta={"title": event.title})
     await db.commit()
 
+    ttl_cache.invalidate("dashboard_")
     return build_event_out(created)
 
 from app.core.deps import get_current_user, get_current_user_optional, require_role
@@ -120,6 +122,7 @@ async def update_event(
 
     await db.commit()
     await db.refresh(event)
+    ttl_cache.invalidate("dashboard_")
     return build_event_out(event)
 
 @router.delete("/{event_id}")
@@ -135,6 +138,7 @@ async def delete_event(
         
     await db.delete(event)
     await db.commit()
+    ttl_cache.invalidate("dashboard_")
     return {"message": "Event deleted successfully"}
 
 

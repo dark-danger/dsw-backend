@@ -4,6 +4,7 @@ from sqlalchemy import select, func, case
 from typing import List
 from app.database import get_db
 from app.core.deps import get_current_user
+from app.core.cache import ttl_cache
 from app.models.all_models import User, UserRole, Task, TaskStatus, FacultyPerformanceLedger
 from app.schemas.schemas import StaffRankingOut
 
@@ -14,6 +15,9 @@ async def get_staff_rankings(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    cached_rankings = ttl_cache.get("lb_staff_rankings")
+    if cached_rankings:
+        return cached_rankings
     faculty_res = await db.execute(
         select(User).where(User.role == UserRole.faculty, User.is_active == True).order_by(User.name)
     )
@@ -73,5 +77,6 @@ async def get_staff_rankings(
         r["rank"] = idx + 1
         result.append(StaffRankingOut(**r))
 
+    ttl_cache.set("lb_staff_rankings", result, ttl=60)
     return result
 

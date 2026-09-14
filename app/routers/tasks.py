@@ -10,6 +10,7 @@ from app.models.all_models import User, UserRole, Task, TaskSubmission, TaskStat
 from app.schemas.schemas import TaskCreate, TaskUpdate, TaskOut, TaskSubmissionCreate, TaskReviewPayload
 from app.core.scoring_rules import calculate_faculty_task_score, FACULTY_SCORE_DECLINED
 from app.services.notification_service import create_notification, log_audit
+from app.core.cache import ttl_cache
 
 router = APIRouter(prefix="/api/tasks", tags=["Tasks"])
 
@@ -126,6 +127,9 @@ async def create_task(
     await log_audit(db, action="CREATE_TASK", entity_type="task", actor_id=current_user.id, entity_id=task.id, meta={"title": task.title, "assignee": faculty.name})
     await db.commit()
 
+    ttl_cache.invalidate("dashboard_")
+    ttl_cache.invalidate("lb_staff_")
+
     return build_task_out(created_task)
 
 @router.get("", response_model=List[TaskOut])
@@ -141,10 +145,10 @@ async def list_tasks(
     query = select(Task).options(
         selectinload(Task.assignee),
         selectinload(Task.event),
-        selectinload(Task.submissions),
+        selectinload(Task.submissions).selectinload(TaskSubmission.submitter),
         selectinload(Task.subtasks).selectinload(Task.assignee),
         selectinload(Task.subtasks).selectinload(Task.event),
-        selectinload(Task.subtasks).selectinload(Task.submissions)
+        selectinload(Task.subtasks).selectinload(Task.submissions).selectinload(TaskSubmission.submitter)
     )
 
     if current_user.role == UserRole.faculty:
@@ -178,10 +182,10 @@ async def get_my_tasks(
         .options(
             selectinload(Task.assignee), 
             selectinload(Task.event), 
-            selectinload(Task.submissions),
+            selectinload(Task.submissions).selectinload(TaskSubmission.submitter),
             selectinload(Task.subtasks).selectinload(Task.assignee),
             selectinload(Task.subtasks).selectinload(Task.event),
-            selectinload(Task.subtasks).selectinload(Task.submissions)
+            selectinload(Task.subtasks).selectinload(Task.submissions).selectinload(TaskSubmission.submitter)
         )
         .where(Task.assigned_to == current_user.id)
         .order_by(Task.created_at.desc())
@@ -315,6 +319,9 @@ async def approve_task(
     await log_audit(db, action="APPROVE_TASK", entity_type="task", actor_id=current_user.id, entity_id=task.id, meta={"score_delta": score_delta})
     await db.commit()
 
+    ttl_cache.invalidate("dashboard_")
+    ttl_cache.invalidate("lb_staff_")
+
     return await get_task_detail(task_id, current_user, db)
 
 @router.post("/{task_id}/decline", response_model=TaskOut)
@@ -366,6 +373,9 @@ async def decline_task(
     await log_audit(db, action="DECLINE_TASK", entity_type="task", actor_id=current_user.id, entity_id=task.id, meta={"remarks": payload.review_remarks})
     await db.commit()
 
+    ttl_cache.invalidate("dashboard_")
+    ttl_cache.invalidate("lb_staff_")
+
     return await get_task_detail(task_id, current_user, db)
 
 @router.patch("/{task_id}", response_model=TaskOut)
@@ -408,6 +418,9 @@ async def update_task(
     await log_audit(db, action="UPDATE_TASK", entity_type="task", actor_id=current_user.id, entity_id=task.id)
     await db.commit()
 
+    ttl_cache.invalidate("dashboard_")
+    ttl_cache.invalidate("lb_staff_")
+
     return await get_task_detail(task_id, current_user, db)
 
 @router.delete("/{task_id}")
@@ -423,5 +436,9 @@ async def delete_task(
         
     await db.delete(task)
     await db.commit()
+
+    ttl_cache.invalidate("dashboard_")
+    ttl_cache.invalidate("lb_staff_")
+
     return {"message": "Task deleted successfully"}
 

@@ -14,6 +14,7 @@ from app.schemas.schemas import (
     LeaderboardSubmissionOut, ManualPointAwardPayload, StudentRankingOut, UserOut
 )
 from app.services.notification_service import create_notification, log_audit
+from app.core.cache import ttl_cache
 
 router = APIRouter(prefix="/api/leaderboard/students", tags=["Student Leaderboard"])
 
@@ -232,6 +233,9 @@ async def approve_student_submission(
     await log_audit(db, action="APPROVE_STUDENT_TASK", entity_type="leaderboard_submission", actor_id=current_user.id, entity_id=sub.id, meta={"points": pts})
     await db.commit()
 
+    ttl_cache.invalidate("lb_student_")
+    ttl_cache.invalidate("dashboard_")
+
     return {"message": f"Approved and awarded {pts} points to student"}
 
 @router.post("/submissions/{submission_id}/reject")
@@ -252,6 +256,7 @@ async def reject_student_submission(
     sub.reviewed_at = datetime.now(timezone.utc)
 
     await db.commit()
+    ttl_cache.invalidate("lb_student_")
     return {"message": "Submission rejected"}
 
 @router.post("/points/manual-award")
@@ -287,6 +292,9 @@ async def manual_award_points(
     await log_audit(db, action="MANUAL_AWARD_POINTS", entity_type="student_points", actor_id=current_user.id, entity_id=student.id, meta={"points": payload.points, "reason": payload.reason_note})
     await db.commit()
 
+    ttl_cache.invalidate("lb_student_")
+    ttl_cache.invalidate("dashboard_")
+
     return {"message": f"Successfully updated student points by {payload.points}"}
 
 from app.core.deps import get_current_user, get_current_user_optional, require_role
@@ -296,6 +304,10 @@ async def get_student_rankings(
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
+    cached_rankings = ttl_cache.get("lb_student_rankings")
+    if cached_rankings:
+        return cached_rankings
+
     # Single high-performance grouped query with conditional aggregation
     stmt = (
         select(
@@ -340,5 +352,6 @@ async def get_student_rankings(
             )
         )
 
+    ttl_cache.set("lb_student_rankings", result, ttl=60)
     return result
 

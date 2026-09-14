@@ -15,6 +15,7 @@ from app.schemas.schemas import (
     ClubTaskCreate, ClubTaskSubmissionPayload, ClubTaskReviewPayload,
     ClubTaskOut, ClubRankingOut, UserOut
 )
+from app.core.cache import ttl_cache
 
 router = APIRouter(prefix="/api/clubs", tags=["Student Clubs & Leaderboard"])
 
@@ -105,6 +106,10 @@ async def get_club_leaderboard(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    cached_rankings = ttl_cache.get("lb_clubs_rankings")
+    if cached_rankings:
+        return cached_rankings
+
     query = select(Club).options(
         selectinload(Club.faculty_coordinator),
         selectinload(Club.tasks)
@@ -136,6 +141,7 @@ async def get_club_leaderboard(
         item["rank"] = idx + 1
         rankings.append(ClubRankingOut(**item))
 
+    ttl_cache.set("lb_clubs_rankings", rankings, ttl=60)
     return rankings
 
 
@@ -297,8 +303,7 @@ async def add_club_member(
         db.add(student_user)
         await db.flush()
     else:
-        # Update details if not present & ensure user is active
-        student_user.is_active = True
+        # Update details if not present
         if payload.roll_number and not student_user.roll_number:
             student_user.roll_number = payload.roll_number
         if payload.branch and not student_user.course_branch:

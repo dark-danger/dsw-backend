@@ -189,11 +189,40 @@ app.add_middleware(
 )
 
 
+import time
+import contextvars
+from sqlalchemy import event
+
+# Per-request context variables for DB query tracking
+_query_count_ctx = contextvars.ContextVar("query_count", default=0)
+_query_time_ctx = contextvars.ContextVar("query_time", default=0.0)
+
+# Attach query listeners on the sync_engine
+@event.listens_for(engine.sync_engine, "before_cursor_execute")
+def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+    context._query_start_time = time.perf_counter()
+
+@event.listens_for(engine.sync_engine, "after_cursor_execute")
+def after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+    duration = time.perf_counter() - getattr(context, "_query_start_time", time.perf_counter())
+    count = _query_count_ctx.get() + 1
+    _query_count_ctx.set(count)
+    _query_time_ctx.set(_query_time_ctx.get() + duration)
+
+
 @app.middleware("http")
-async def db_init_middleware(request: Request, call_next):
+async def profiling_and_timing_middleware(request: Request, call_next):
+    # Reset per-request DB query metrics
+    _query_count_ctx.set(0)
+    _query_time_ctx.set(0.0)
+    start_time = time.perf_counter()
+
     # Preflight requests and lightweight health/docs routes bypass DB initialization for maximum speed
-    if request.method == "OPTIONS" or request.url.path in ["/", "/health", "/docs", "/openapi.json"]:
-        return await call_next(request)
+    if request.method == "OPTIONS" or request.url.path in ["/", "/health", "/api/keep-warm", "/docs", "/openapi.json"]:
+        response = await call_next(request)
+        process_time = (time.perf_counter() - start_time) * 1000
+        response.headers["X-Process-Time"] = f"{process_time:.2f}ms"
+        return response
         
     global _db_initialized
     if not _db_initialized:
@@ -206,6 +235,16 @@ async def db_init_middleware(request: Request, call_next):
                 headers={"Access-Control-Allow-Origin": "*"}
             )
     response = await call_next(request)
+    total_time_ms = (time.perf_counter() - start_time) * 1000
+    db_count = _query_count_ctx.get()
+    db_time_ms = _query_time_ctx.get() * 1000
+
+    response.headers["X-Process-Time"] = f"{total_time_ms:.2f}ms"
+    response.headers["X-DB-Queries"] = str(db_count)
+    response.headers["X-DB-Time"] = f"{db_time_ms:.2f}ms"
+
+    # Log query execution time & counts for instant N+1 / slow route visibility
+    print(f"[API Profiler] {request.method} {request.url.path} -> {response.status_code} ({total_time_ms:.1f}ms total | {db_count} DB queries in {db_time_ms:.1f}ms)")
     return response
 
 @app.exception_handler(Exception)
@@ -245,11 +284,13 @@ if os.path.exists(settings.UPLOAD_DIR):
 
 
 @app.get("/health")
+@app.get("/api/keep-warm")
 async def health_check():
     return {
         "status": "healthy",
         "service": "DSW API",
-        "db_initialized": _db_initialized
+        "db_initialized": _db_initialized,
+        "timestamp": time.time()
     }
 
 @app.get("/")

@@ -10,6 +10,7 @@ from app.models.all_models import (
     Announcement, DynamicForm, DynamicFormResponse, FeedbackForm, FeedbackResponse,
     StudentPointsLedger, AuditLog
 )
+from app.core.cache import ttl_cache
 from app.schemas.schemas import DashboardSummaryOut, AuditLogOut
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
@@ -19,6 +20,9 @@ async def get_dashboard_summary(
     current_user: User = Depends(require_role([UserRole.super_admin])),
     db: AsyncSession = Depends(get_db)
 ):
+    cached_summary = ttl_cache.get("dashboard_summary")
+    if cached_summary:
+        return cached_summary
     # 1. Faculty & Student count in a single query
     user_counts = (await db.execute(
         select(
@@ -69,7 +73,7 @@ async def get_dashboard_summary(
         )
     )).one()
 
-    return DashboardSummaryOut(
+    summary_out = DashboardSummaryOut(
         total_faculty=int(user_counts.faculty_cnt or 0),
         total_students=int(user_counts.student_cnt or 0),
         total_events=int(event_counts.total or 0),
@@ -97,6 +101,8 @@ async def get_dashboard_summary(
         total_feedback_responses=int(extra_counts.fb_resp_cnt or 0),
         total_student_points_awarded=int(extra_counts.total_pts or 0)
     )
+    ttl_cache.set("dashboard_summary", summary_out, ttl=45)
+    return summary_out
 
 @router.get("/activity", response_model=List[AuditLogOut])
 @router.get("/recent-activity", response_model=List[AuditLogOut])
@@ -104,6 +110,10 @@ async def get_recent_activity_feed(
     current_user: User = Depends(require_role([UserRole.super_admin])),
     db: AsyncSession = Depends(get_db)
 ):
+    cached_activity = ttl_cache.get("dashboard_activity")
+    if cached_activity:
+        return cached_activity
+
     result = await db.execute(
         select(AuditLog).options(selectinload(AuditLog.actor)).order_by(AuditLog.created_at.desc()).limit(20)
     )
@@ -120,4 +130,5 @@ async def get_recent_activity_feed(
             meta=l.meta,
             created_at=l.created_at
         ))
+    ttl_cache.set("dashboard_activity", out, ttl=30)
     return out
