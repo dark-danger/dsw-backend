@@ -45,7 +45,7 @@ elif db_url.startswith("sqlite"):
 print(f"[DB] Using: {db_url[:40]}...")
 
 engine_kwargs = {
-    "echo": False,
+    "echo": True,
     "connect_args": connect_args,
     "pool_pre_ping": True,
 }
