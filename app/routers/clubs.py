@@ -297,7 +297,8 @@ async def add_club_member(
         db.add(student_user)
         await db.flush()
     else:
-        # Update details if not present
+        # Update details if not present & ensure user is active
+        student_user.is_active = True
         if payload.roll_number and not student_user.roll_number:
             student_user.roll_number = payload.roll_number
         if payload.branch and not student_user.course_branch:

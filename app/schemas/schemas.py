@@ -62,6 +62,15 @@ class StudentImportRow(BaseModel):
     year: str
     phone: Optional[str] = None
 
+class StudentCreate(BaseModel):
+    name: str
+    email: EmailStr
+    roll_number: Optional[str] = None
+    course_branch: Optional[str] = None
+    year: Optional[str] = None
+    phone: Optional[str] = None
+    password: Optional[str] = "Student@123"
+
 class PeriodStats(BaseModel):
     total_assigned: int
     completed_approved: int
