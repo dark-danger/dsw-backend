@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import DeclarativeBase
 from app.config import settings
 
-db_url = settings.DATABASE_URL
+db_url = (settings.DATABASE_URL or "").strip().strip('"').strip("'").strip()
 
 if not db_url:
     # Provide a dummy URL just to allow the module to load without throwing an ArgumentError.
@@ -30,6 +30,7 @@ if db_url.startswith("postgresql+asyncpg"):
     # Clean any trailing ? or & left over
     db_url = re.sub(r'\?$', '', db_url)
     db_url = re.sub(r'\&$', '', db_url)
+    db_url = db_url.strip()
     # Always use SSL for Supabase/external PostgreSQL
     ssl_ctx = _ssl.create_default_context()
     ssl_ctx.check_hostname = False
