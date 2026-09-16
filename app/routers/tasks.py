@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, inspect
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from app.database import get_db
 from app.core.deps import get_current_user, require_role
 from app.models.all_models import User, UserRole, Task, TaskSubmission, TaskStatus, FacultyPerformanceLedger, Event
@@ -94,6 +94,35 @@ async def create_task(
             event_id = payload.event_id if payload.event_id is not None else parent_task.event_id
             task_type = "subtask"
         else:
+            # Enforce 1 self-created task per 24 hours rate limit
+            now_utc = datetime.now(timezone.utc)
+            twenty_four_hours_ago = now_utc - timedelta(hours=24)
+            last_self_res = await db.execute(
+                select(Task)
+                .where(
+                    Task.assigned_by == current_user.id,
+                    Task.assigned_to == current_user.id,
+                    Task.parent_task_id.is_(None),
+                    Task.created_at >= twenty_four_hours_ago
+                )
+                .order_by(Task.created_at.desc())
+            )
+            last_self_task = last_self_res.scalars().first()
+            if last_self_task:
+                created_t = last_self_task.created_at
+                if created_t.tzinfo is None:
+                    created_t = created_t.replace(tzinfo=timezone.utc)
+                next_allowed = created_t + timedelta(hours=24)
+                rem_seconds = max(0, int((next_allowed - now_utc).total_seconds()))
+                if rem_seconds > 0:
+                    rem_h = rem_seconds // 3600
+                    rem_m = (rem_seconds % 3600) // 60
+                    time_str = f"{rem_h}h {rem_m}m" if rem_h > 0 else f"{rem_m}m"
+                    raise HTTPException(
+                        status_code=429,
+                        detail=f"Daily Limit: You can only propose 1 self-created task every 24 hours. Next task proposal available in {time_str}."
+                    )
+
             assigned_to = current_user.id
             event_id = payload.event_id
             task_type = payload.task_type or "self_created"
@@ -388,6 +417,57 @@ async def get_my_tasks(
     )
     tasks = result.scalars().all()
     return [build_task_out(t) for t in tasks]
+
+
+@router.get("/self-create-limit")
+async def get_self_create_limit(
+    current_user: User = Depends(require_role([UserRole.faculty])),
+    db: AsyncSession = Depends(get_db)
+):
+    now_utc = datetime.now(timezone.utc)
+    twenty_four_hours_ago = now_utc - timedelta(hours=24)
+    
+    last_self_res = await db.execute(
+        select(Task)
+        .where(
+            Task.assigned_by == current_user.id,
+            Task.assigned_to == current_user.id,
+            Task.parent_task_id.is_(None),
+            Task.created_at >= twenty_four_hours_ago
+        )
+        .order_by(Task.created_at.desc())
+    )
+    last_self_task = last_self_res.scalars().first()
+    
+    if not last_self_task:
+        return {
+            "can_create": True,
+            "seconds_remaining": 0,
+            "next_allowed_at": None,
+            "time_remaining_str": None,
+            "message": "You can propose a self-created task."
+        }
+    
+    created_t = last_self_task.created_at
+    if created_t.tzinfo is None:
+        created_t = created_t.replace(tzinfo=timezone.utc)
+    next_allowed = created_t + timedelta(hours=24)
+    rem_seconds = max(0, int((next_allowed - now_utc).total_seconds()))
+    can_create = (rem_seconds <= 0)
+    
+    rem_h = rem_seconds // 3600
+    rem_m = (rem_seconds % 3600) // 60
+    time_str = f"{rem_h}h {rem_m}m" if rem_h > 0 else f"{rem_m}m"
+    
+    return {
+        "can_create": can_create,
+        "seconds_remaining": rem_seconds,
+        "next_allowed_at": next_allowed.isoformat(),
+        "time_remaining_str": time_str if not can_create else None,
+        "last_task_id": last_self_task.id,
+        "last_task_title": last_self_task.title,
+        "message": f"Daily Limit: 1 task proposal per 24 hours. Next available in {time_str}." if not can_create else "You can propose a self-created task."
+    }
 
 
 @router.get("/{task_id}", response_model=TaskOut)
