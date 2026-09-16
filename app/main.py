@@ -38,6 +38,14 @@ async def apply_safe_migrations(conn):
         # other table column verifications
         "ALTER TABLE events ADD COLUMN IF NOT EXISTS event_type VARCHAR(50) DEFAULT 'Seminar';",
         "ALTER TABLE events ADD COLUMN IF NOT EXISTS venue VARCHAR(200);",
+        # Multi-file attachment and arbitrary length column alterations
+        "ALTER TABLE task_submissions ALTER COLUMN file_url TYPE TEXT;",
+        "ALTER TABLE task_submissions ALTER COLUMN file_name TYPE TEXT;",
+        "ALTER TABLE task_submissions ALTER COLUMN file_type TYPE VARCHAR(100);",
+        "ALTER TABLE tasks ALTER COLUMN description TYPE TEXT;",
+        "ALTER TABLE tasks ALTER COLUMN title TYPE VARCHAR(500);",
+        "ALTER TABLE leaderboard_task_submissions ALTER COLUMN file_url TYPE TEXT;",
+        "ALTER TABLE club_tasks ALTER COLUMN file_url TYPE TEXT;",
         # Task start_date time limit columns
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ;",
         "ALTER TABLE leaderboard_tasks ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ;",

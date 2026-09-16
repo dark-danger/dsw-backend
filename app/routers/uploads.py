@@ -8,9 +8,12 @@ from app.models.all_models import User
 
 router = APIRouter(prefix="/api/uploads", tags=["Uploads"])
 
-ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png", ".webp"}
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
-MAX_FILE_SIZE = 15 * 1024 * 1024 # 15 MB
+ALLOWED_EXTENSIONS = {
+    ".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png", ".webp",
+    ".gif", ".svg", ".xls", ".xlsx", ".ppt", ".pptx", ".zip", ".txt", ".csv"
+}
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+MAX_FILE_SIZE = 25 * 1024 * 1024 # 25 MB
 MAX_IMAGE_DIMENSION = 1920 # Max width or height in px for uploaded photos
 
 
