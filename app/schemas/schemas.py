@@ -90,13 +90,18 @@ class FacultyStatsOut(BaseModel):
 class TaskCreate(BaseModel):
     title: str
     description: Optional[str] = None
-    task_type: str = "standalone" # standalone / event_linked
+    task_type: Optional[str] = "standalone" # standalone / event_linked / self_created
     event_id: Optional[int] = None
     parent_task_id: Optional[int] = None
-    assigned_to: int
+    assigned_to: Optional[int] = None
     start_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
     priority: TaskPriority = TaskPriority.medium
+    file_url: Optional[str] = None
+    file_name: Optional[str] = None
+    file_type: Optional[str] = None
+    file_size: Optional[int] = None
+
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None

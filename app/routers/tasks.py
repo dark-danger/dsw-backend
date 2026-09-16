@@ -75,10 +75,86 @@ def build_task_out(t: Task) -> TaskOut:
 @router.post("", response_model=TaskOut)
 async def create_task(
     payload: TaskCreate,
-    current_user: User = Depends(require_role([UserRole.super_admin])),
+    current_user: User = Depends(require_role([UserRole.super_admin, UserRole.faculty])),
     db: AsyncSession = Depends(get_db)
 ):
-    # Verify assignee is faculty
+    if current_user.role == UserRole.faculty:
+        # Faculty creating their own task proposal/duty
+        assigned_to = current_user.id
+        assigned_by = current_user.id
+        task_type = payload.task_type or "self_created"
+        initial_status = TaskStatus.submitted # Self-created tasks require admin approval
+
+        task = Task(
+            title=payload.title,
+            description=payload.description,
+            task_type=task_type,
+            event_id=payload.event_id,
+            parent_task_id=payload.parent_task_id,
+            assigned_to=assigned_to,
+            assigned_by=assigned_by,
+            start_date=payload.start_date,
+            due_date=payload.due_date,
+            priority=payload.priority,
+            status=initial_status
+        )
+        db.add(task)
+        await db.flush() # obtain task.id
+
+        # Attach initial submission record if file or description is provided
+        submission = TaskSubmission(
+            task_id=task.id,
+            submitted_by=current_user.id,
+            description=payload.description or "Faculty self-created task submission",
+            file_url=payload.file_url,
+            file_name=payload.file_name,
+            file_type=payload.file_type,
+            file_size=payload.file_size,
+            review_status="pending"
+        )
+        db.add(submission)
+        await db.commit()
+
+        # Re-query task with relations
+        res = await db.execute(
+            select(Task)
+            .options(
+                selectinload(Task.assignee),
+                selectinload(Task.event),
+                selectinload(Task.submissions).selectinload(TaskSubmission.submitter),
+                selectinload(Task.subtasks).selectinload(Task.assignee),
+                selectinload(Task.subtasks).selectinload(Task.event),
+                selectinload(Task.subtasks).selectinload(Task.submissions)
+            )
+            .where(Task.id == task.id)
+        )
+        created_task = res.scalar_one()
+
+        # Notify Super Admins
+        admin_res = await db.execute(select(User).where(User.role == UserRole.super_admin))
+        admins = admin_res.scalars().all()
+        for admin in admins:
+            await create_notification(
+                db,
+                title="New Faculty Task Request 📋",
+                body=f"Faculty {current_user.name} submitted task: '{task.title}' for approval",
+                type="task_request",
+                user_id=admin.id,
+                link="/admin/requests"
+            )
+
+        await log_audit(db, action="CREATE_FACULTY_TASK_REQUEST", entity_type="task", actor_id=current_user.id, entity_id=task.id, meta={"title": task.title, "faculty": current_user.name})
+        await db.commit()
+
+        ttl_cache.invalidate("dashboard_")
+        ttl_cache.invalidate("lb_staff_")
+
+        return build_task_out(created_task)
+
+    # Admin creating task assigned to faculty
+    if not payload.assigned_to:
+        raise HTTPException(status_code=400, detail="Assigned faculty member must be specified")
+
     fac_res = await db.execute(select(User).where(User.id == payload.assigned_to, User.role == UserRole.faculty))
     faculty = fac_res.scalar_one_or_none()
     if not faculty:
@@ -87,7 +163,7 @@ async def create_task(
     task = Task(
         title=payload.title,
         description=payload.description,
-        task_type=payload.task_type,
+        task_type=payload.task_type or "standalone",
         event_id=payload.event_id,
         parent_task_id=payload.parent_task_id,
         assigned_to=payload.assigned_to,
@@ -132,11 +208,88 @@ async def create_task(
 
     return build_task_out(created_task)
 
+
+@router.get("/requests", response_model=List[TaskOut])
+async def list_task_requests(
+    status_filter: Optional[str] = None,
+    type_filter: Optional[str] = None,
+    faculty_id: Optional[int] = None,
+    faculty_name: Optional[str] = None,
+    event_id: Optional[int] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    priority: Optional[str] = None,
+    search: Optional[str] = None,
+    current_user: User = Depends(require_role([UserRole.super_admin])),
+    db: AsyncSession = Depends(get_db)
+):
+    query = select(Task).options(
+        selectinload(Task.assignee),
+        selectinload(Task.event),
+        selectinload(Task.submissions).selectinload(TaskSubmission.submitter),
+        selectinload(Task.subtasks).selectinload(Task.assignee),
+        selectinload(Task.subtasks).selectinload(Task.event),
+        selectinload(Task.subtasks).selectinload(Task.submissions).selectinload(TaskSubmission.submitter)
+    )
+
+    if faculty_id:
+        query = query.where(Task.assigned_to == faculty_id)
+
+    if event_id:
+        query = query.where(Task.event_id == event_id)
+
+    if type_filter == "self_created":
+        query = query.where(Task.assigned_by == Task.assigned_to)
+    elif type_filter == "assigned_duty":
+        query = query.where(Task.assigned_by != Task.assigned_to)
+
+    if priority:
+        query = query.where(Task.priority == priority)
+
+    if from_date:
+        try:
+            from_dt = datetime.fromisoformat(from_date.replace("Z", "+00:00"))
+            query = query.where((Task.due_date >= from_dt) | (Task.start_date >= from_dt) | (Task.created_at >= from_dt))
+        except Exception:
+            pass
+
+    if to_date:
+        try:
+            to_dt = datetime.fromisoformat(to_date.replace("Z", "+00:00"))
+            query = query.where((Task.due_date <= to_dt) | (Task.start_date <= to_dt) | (Task.created_at <= to_dt))
+        except Exception:
+            pass
+
+    if status_filter and status_filter != "all":
+        if status_filter == "pending":
+            query = query.where(Task.status.in_([TaskStatus.pending, TaskStatus.submitted]))
+        elif status_filter == "submitted":
+            query = query.where(Task.status == TaskStatus.submitted)
+        elif status_filter == "approved":
+            query = query.where(Task.status == TaskStatus.approved)
+        elif status_filter == "declined":
+            query = query.where(Task.status == TaskStatus.declined)
+        else:
+            query = query.where(Task.status == status_filter)
+
+    if faculty_name:
+        query = query.join(Task.assignee).where(User.name.ilike(f"%{faculty_name}%"))
+
+    if search:
+        query = query.where(Task.title.ilike(f"%{search}%") | Task.description.ilike(f"%{search}%"))
+
+    result = await db.execute(query.order_by(Task.created_at.desc()))
+    tasks = result.scalars().all()
+    return [build_task_out(t) for t in tasks]
+
+
 @router.get("", response_model=List[TaskOut])
 async def list_tasks(
     assigned_to: Optional[int] = None,
     status_filter: Optional[str] = None,
     event_id: Optional[int] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
     priority: Optional[str] = None,
     search: Optional[str] = None,
     current_user: User = Depends(get_current_user),
@@ -162,6 +315,21 @@ async def list_tasks(
         query = query.where(Task.event_id == event_id)
     if priority:
         query = query.where(Task.priority == priority)
+
+    if from_date:
+        try:
+            from_dt = datetime.fromisoformat(from_date.replace("Z", "+00:00"))
+            query = query.where((Task.due_date >= from_dt) | (Task.start_date >= from_dt) | (Task.created_at >= from_dt))
+        except Exception:
+            pass
+
+    if to_date:
+        try:
+            to_dt = datetime.fromisoformat(to_date.replace("Z", "+00:00"))
+            query = query.where((Task.due_date <= to_dt) | (Task.start_date <= to_dt) | (Task.created_at <= to_dt))
+        except Exception:
+            pass
+
     if search:
         query = query.where(Task.title.ilike(f"%{search}%"))
 
@@ -171,6 +339,7 @@ async def list_tasks(
     # Filter top-level tasks if viewing list, subtasks attached inside
     top_tasks = [t for t in tasks if t.parent_task_id is None] if not search else tasks
     return [build_task_out(t) for t in top_tasks]
+
 
 @router.get("/mine", response_model=List[TaskOut])
 async def get_my_tasks(
@@ -250,14 +419,19 @@ async def submit_task(
     task.status = TaskStatus.submitted
     await db.commit()
 
-    await create_notification(
-        db,
-        title="Task Submitted for Review",
-        body=f"Faculty {current_user.name} submitted task: '{task.title}'",
-        type="task_submitted",
-        user_id=task.assigned_by,
-        link="/admin/tasks"
-    )
+    # Notify admin
+    admin_res = await db.execute(select(User).where(User.role == UserRole.super_admin))
+    admins = admin_res.scalars().all()
+    for admin in admins:
+        await create_notification(
+            db,
+            title="Task Submitted for Review 📋",
+            body=f"Faculty {current_user.name} submitted task: '{task.title}'",
+            type="task_submitted",
+            user_id=admin.id,
+            link="/admin/requests"
+        )
+
     await log_audit(db, action="SUBMIT_TASK", entity_type="task", actor_id=current_user.id, entity_id=task.id)
     await db.commit()
 
@@ -285,13 +459,24 @@ async def approve_task(
 
     task.status = TaskStatus.approved
 
-    # Update latest submission review
+    # Update latest submission review or create one if none exists
     if task.submissions:
         sub = sorted(task.submissions, key=lambda s: s.id)[-1]
         sub.review_status = "approved"
         sub.reviewed_by = current_user.id
         sub.reviewed_at = now
         sub.review_remarks = payload.review_remarks if payload else "Approved by Admin"
+    else:
+        sub = TaskSubmission(
+            task_id=task.id,
+            submitted_by=task.assigned_to,
+            description=task.description or "Approved by Admin",
+            review_status="approved",
+            reviewed_by=current_user.id,
+            reviewed_at=now,
+            review_remarks=payload.review_remarks if payload else "Approved by Admin"
+        )
+        db.add(sub)
 
     score_delta = calculate_faculty_task_score(is_late)
 
@@ -350,6 +535,17 @@ async def decline_task(
         sub.reviewed_by = current_user.id
         sub.reviewed_at = now
         sub.review_remarks = payload.review_remarks
+    else:
+        sub = TaskSubmission(
+            task_id=task.id,
+            submitted_by=task.assigned_to,
+            description=task.description or "Task proposal",
+            review_status="declined",
+            reviewed_by=current_user.id,
+            reviewed_at=now,
+            review_remarks=payload.review_remarks
+        )
+        db.add(sub)
 
     # Faculty Performance Ledger Entry (-3 for decline)
     ledger_entry = FacultyPerformanceLedger(
