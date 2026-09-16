@@ -78,18 +78,34 @@ async def create_task(
     current_user: User = Depends(require_role([UserRole.super_admin, UserRole.faculty])),
     db: AsyncSession = Depends(get_db)
 ):
+    parent_task = None
+    if payload.parent_task_id:
+        p_res = await db.execute(select(Task).where(Task.id == payload.parent_task_id))
+        parent_task = p_res.scalar_one_or_none()
+        if not parent_task:
+            raise HTTPException(status_code=404, detail="Parent task not found")
+
     if current_user.role == UserRole.faculty:
-        # Faculty creating their own task proposal/duty
-        assigned_to = current_user.id
+        # Faculty creating their own task proposal/duty or subtask
+        if parent_task:
+            if parent_task.assigned_to != current_user.id:
+                raise HTTPException(status_code=403, detail="You can only add subtasks to tasks assigned to you")
+            assigned_to = parent_task.assigned_to
+            event_id = payload.event_id if payload.event_id is not None else parent_task.event_id
+            task_type = "subtask"
+        else:
+            assigned_to = current_user.id
+            event_id = payload.event_id
+            task_type = payload.task_type or "self_created"
+
         assigned_by = current_user.id
-        task_type = payload.task_type or "self_created"
-        initial_status = TaskStatus.submitted # Self-created tasks require admin approval
+        initial_status = TaskStatus.submitted # Self-created tasks/subtasks require admin approval
 
         task = Task(
             title=payload.title,
             description=payload.description,
             task_type=task_type,
-            event_id=payload.event_id,
+            event_id=event_id,
             parent_task_id=payload.parent_task_id,
             assigned_to=assigned_to,
             assigned_by=assigned_by,
@@ -105,7 +121,7 @@ async def create_task(
         submission = TaskSubmission(
             task_id=task.id,
             submitted_by=current_user.id,
-            description=payload.description or "Faculty self-created task submission",
+            description=payload.description or ("Faculty subtask submission" if parent_task else "Faculty self-created task submission"),
             file_url=payload.file_url,
             file_name=payload.file_name,
             file_type=payload.file_type,
@@ -131,19 +147,20 @@ async def create_task(
         created_task = res.scalar_one()
 
         # Notify Super Admins
+        item_kind = "Subtask" if parent_task else "Faculty Task"
         admin_res = await db.execute(select(User).where(User.role == UserRole.super_admin))
         admins = admin_res.scalars().all()
         for admin in admins:
             await create_notification(
                 db,
-                title="New Faculty Task Request 📋",
-                body=f"Faculty {current_user.name} submitted task: '{task.title}' for approval",
+                title=f"New {item_kind} Request 📋",
+                body=f"Faculty {current_user.name} submitted {item_kind.lower()}: '{task.title}' for approval",
                 type="task_request",
                 user_id=admin.id,
                 link="/admin/requests"
             )
 
-        await log_audit(db, action="CREATE_FACULTY_TASK_REQUEST", entity_type="task", actor_id=current_user.id, entity_id=task.id, meta={"title": task.title, "faculty": current_user.name})
+        await log_audit(db, action="CREATE_FACULTY_TASK_REQUEST", entity_type="task", actor_id=current_user.id, entity_id=task.id, meta={"title": task.title, "faculty": current_user.name, "parent_task_id": payload.parent_task_id})
         await db.commit()
 
         ttl_cache.invalidate("dashboard_")
@@ -151,11 +168,20 @@ async def create_task(
 
         return build_task_out(created_task)
 
-    # Admin creating task assigned to faculty
-    if not payload.assigned_to:
-        raise HTTPException(status_code=400, detail="Assigned faculty member must be specified")
+    # Admin creating task or subtask assigned to faculty
+    if parent_task:
+        # Strict Rule: Subtask is strictly locked to the parent task assignee
+        assigned_to = parent_task.assigned_to
+        event_id = payload.event_id if payload.event_id is not None else parent_task.event_id
+        task_type = "subtask"
+    else:
+        if not payload.assigned_to:
+            raise HTTPException(status_code=400, detail="Assigned faculty member must be specified")
+        assigned_to = payload.assigned_to
+        event_id = payload.event_id
+        task_type = payload.task_type or "standalone"
 
-    fac_res = await db.execute(select(User).where(User.id == payload.assigned_to, User.role == UserRole.faculty))
+    fac_res = await db.execute(select(User).where(User.id == assigned_to, User.role == UserRole.faculty))
     faculty = fac_res.scalar_one_or_none()
     if not faculty:
         raise HTTPException(status_code=400, detail="Assigned user must be a registered faculty member")
@@ -163,10 +189,10 @@ async def create_task(
     task = Task(
         title=payload.title,
         description=payload.description,
-        task_type=payload.task_type or "standalone",
-        event_id=payload.event_id,
+        task_type=task_type,
+        event_id=event_id,
         parent_task_id=payload.parent_task_id,
-        assigned_to=payload.assigned_to,
+        assigned_to=assigned_to,
         assigned_by=current_user.id,
         start_date=payload.start_date,
         due_date=payload.due_date,
@@ -192,15 +218,16 @@ async def create_task(
     created_task = res.scalar_one()
 
     # Send Notification to faculty
+    item_name = "subtask" if payload.parent_task_id else "task"
     await create_notification(
         db,
-        title="New Task Assigned",
-        body=f"You have been assigned task: '{task.title}'",
+        title=f"New {item_name.title()} Assigned",
+        body=f"You have been assigned {item_name}: '{task.title}'",
         type="task_assigned",
         user_id=faculty.id,
         link="/faculty/tasks"
     )
-    await log_audit(db, action="CREATE_TASK", entity_type="task", actor_id=current_user.id, entity_id=task.id, meta={"title": task.title, "assignee": faculty.name})
+    await log_audit(db, action="CREATE_TASK", entity_type="task", actor_id=current_user.id, entity_id=task.id, meta={"title": task.title, "assignee": faculty.name, "parent_task_id": payload.parent_task_id})
     await db.commit()
 
     ttl_cache.invalidate("dashboard_")
@@ -356,7 +383,7 @@ async def get_my_tasks(
             selectinload(Task.subtasks).selectinload(Task.event),
             selectinload(Task.subtasks).selectinload(Task.submissions).selectinload(TaskSubmission.submitter)
         )
-        .where(Task.assigned_to == current_user.id)
+        .where(Task.assigned_to == current_user.id, Task.parent_task_id.is_(None))
         .order_by(Task.created_at.desc())
     )
     tasks = result.scalars().all()
@@ -422,11 +449,12 @@ async def submit_task(
     # Notify admin
     admin_res = await db.execute(select(User).where(User.role == UserRole.super_admin))
     admins = admin_res.scalars().all()
+    item_type = "Subtask" if task.parent_task_id else "Task"
     for admin in admins:
         await create_notification(
             db,
-            title="Task Submitted for Review 📋",
-            body=f"Faculty {current_user.name} submitted task: '{task.title}'",
+            title=f"{item_type} Submitted for Review 📋",
+            body=f"Faculty {current_user.name} submitted {item_type.lower()}: '{task.title}'",
             type="task_submitted",
             user_id=admin.id,
             link="/admin/requests"
@@ -478,10 +506,11 @@ async def approve_task(
         )
         db.add(sub)
 
-    score_delta = calculate_faculty_task_score(is_late)
+    is_subtask = (task.parent_task_id is not None)
+    score_delta = 0 if is_subtask else calculate_faculty_task_score(is_late)
 
-    # Faculty Performance Ledger Entry (+10 for on-time, +5 for late)
-    if not already_approved:
+    # Faculty Performance Ledger Entry (+10 for on-time, +5 for late ONLY on main tasks; subtasks award +0)
+    if not already_approved and not is_subtask:
         ledger_entry = FacultyPerformanceLedger(
             faculty_id=task.assigned_to,
             score_delta=score_delta,
@@ -493,15 +522,22 @@ async def approve_task(
         await db.commit()
 
     # Notify faculty member
+    if is_subtask:
+        notif_title = "Subtask Approved! 🎉"
+        notif_body = f"Your subtask '{task.title}' has been approved by DSW."
+    else:
+        notif_title = "Task Approved! 🎉"
+        notif_body = f"Your task submission for '{task.title}' has been approved by DSW (+{score_delta} leaderboard pts)."
+
     await create_notification(
         db,
-        title="Task Approved! 🎉",
-        body=f"Your task submission for '{task.title}' has been approved by DSW (+{score_delta} leaderboard pts).",
+        title=notif_title,
+        body=notif_body,
         type="task_approved",
         user_id=task.assigned_to,
         link=f"/faculty/tasks"
     )
-    await log_audit(db, action="APPROVE_TASK", entity_type="task", actor_id=current_user.id, entity_id=task.id, meta={"score_delta": score_delta})
+    await log_audit(db, action="APPROVE_SUBTASK" if is_subtask else "APPROVE_TASK", entity_type="task", actor_id=current_user.id, entity_id=task.id, meta={"score_delta": score_delta, "is_subtask": is_subtask})
     await db.commit()
 
     ttl_cache.invalidate("dashboard_")
@@ -547,26 +583,29 @@ async def decline_task(
         )
         db.add(sub)
 
-    # Faculty Performance Ledger Entry (-3 for decline)
+    is_subtask = (task.parent_task_id is not None)
+
+    # Faculty Performance Ledger Entry (-3 for decline on both tasks & subtasks)
     ledger_entry = FacultyPerformanceLedger(
         faculty_id=task.assigned_to,
-        score_delta=FACULTY_SCORE_DECLINED,
-        source_type="task_declined",
+        score_delta=FACULTY_SCORE_DECLINED, # -3
+        source_type="subtask_declined" if is_subtask else "task_declined",
         source_id=task.id,
-        note=f"Declined by admin ({FACULTY_SCORE_DECLINED})"
+        note=f"Subtask declined by admin ({FACULTY_SCORE_DECLINED})" if is_subtask else f"Declined by admin ({FACULTY_SCORE_DECLINED})"
     )
     db.add(ledger_entry)
     await db.commit()
 
+    item_label = "subtask" if is_subtask else "task"
     await create_notification(
         db,
-        title="Task Declined - Revision Required",
-        body=f"Your submission for '{task.title}' was declined. Remark: '{payload.review_remarks}'",
+        title=f"{item_label.title()} Declined (-3 pts)",
+        body=f"Your {item_label} '{task.title}' was declined by DSW (-3 pts penalty). Remark: '{payload.review_remarks}'",
         type="task_declined",
         user_id=task.assigned_to,
         link="/faculty/tasks"
     )
-    await log_audit(db, action="DECLINE_TASK", entity_type="task", actor_id=current_user.id, entity_id=task.id, meta={"remarks": payload.review_remarks})
+    await log_audit(db, action="DECLINE_SUBTASK" if is_subtask else "DECLINE_TASK", entity_type="task", actor_id=current_user.id, entity_id=task.id, meta={"remarks": payload.review_remarks, "score_delta": FACULTY_SCORE_DECLINED, "is_subtask": is_subtask})
     await db.commit()
 
     ttl_cache.invalidate("dashboard_")
@@ -589,6 +628,12 @@ async def update_task(
     old_assignee = task.assigned_to
     data = payload.model_dump(exclude_unset=True)
 
+    if task.parent_task_id is not None and "assigned_to" in data and data["assigned_to"] is not None:
+        p_res = await db.execute(select(Task).where(Task.id == task.parent_task_id))
+        parent_task = p_res.scalar_one_or_none()
+        if parent_task and data["assigned_to"] != parent_task.assigned_to:
+            raise HTTPException(status_code=400, detail="Subtask assignee is locked to the parent task assignee and cannot be changed independently.")
+
     if "assigned_to" in data and data["assigned_to"] is not None:
         fac_res = await db.execute(select(User).where(User.id == data["assigned_to"], User.role == UserRole.faculty))
         faculty = fac_res.scalar_one_or_none()
@@ -599,6 +644,14 @@ async def update_task(
         setattr(task, key, value)
 
     await db.commit()
+
+    # If top-level task assignee was changed, cascade to all child subtasks
+    if task.parent_task_id is None and "assigned_to" in data and data["assigned_to"] != old_assignee:
+        from sqlalchemy import update
+        await db.execute(
+            update(Task).where(Task.parent_task_id == task.id).values(assigned_to=data["assigned_to"])
+        )
+        await db.commit()
 
     if "assigned_to" in data and data["assigned_to"] != old_assignee:
         await create_notification(
