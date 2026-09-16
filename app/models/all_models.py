@@ -134,9 +134,9 @@ class TaskSubmission(Base):
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
     submitted_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     description: Mapped[str] = mapped_column(Text, nullable=True)
-    file_url: Mapped[str] = mapped_column(String(500), nullable=True)
-    file_type: Mapped[str] = mapped_column(String(50), nullable=True) # pdf, doc, jpg, png
-    file_name: Mapped[str] = mapped_column(String(255), nullable=True)
+    file_url: Mapped[str] = mapped_column(Text, nullable=True)
+    file_type: Mapped[str] = mapped_column(String(100), nullable=True) # pdf, doc, jpg, png, multi
+    file_name: Mapped[str] = mapped_column(Text, nullable=True)
     file_size: Mapped[int] = mapped_column(Integer, nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
     review_status: Mapped[str] = mapped_column(String(50), default="pending") # pending, approved, declined
@@ -373,7 +373,7 @@ class LeaderboardTaskSubmission(Base):
     leaderboard_task_id: Mapped[int] = mapped_column(ForeignKey("leaderboard_tasks.id", ondelete="CASCADE"), nullable=False, index=True)
     student_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     submission_text: Mapped[str] = mapped_column(Text, nullable=True)
-    file_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    file_url: Mapped[str] = mapped_column(Text, nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
     status: Mapped[str] = mapped_column(String(30), default="pending", index=True) # pending, approved, rejected
     points_awarded: Mapped[int] = mapped_column(Integer, nullable=True)
@@ -481,7 +481,7 @@ class ClubTask(Base):
     due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="pending", index=True) # pending, submitted, approved, declined
     submission_text: Mapped[str] = mapped_column(Text, nullable=True)
-    file_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    file_url: Mapped[str] = mapped_column(Text, nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     submitted_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     reviewed_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
