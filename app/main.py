@@ -101,6 +101,8 @@ async def apply_safe_migrations(conn):
         "CREATE INDEX IF NOT EXISTS idx_clubs_faculty_id ON clubs (faculty_id);",
         "CREATE INDEX IF NOT EXISTS idx_club_tasks_club_id ON club_tasks (club_id);",
         "CREATE INDEX IF NOT EXISTS idx_club_tasks_status ON club_tasks (status);",
+        # Update super admin name to Dr. Rekha Narang
+        "UPDATE users SET name = 'Dr. Rekha Narang' WHERE email = 'admin@geeta.edu.in' OR (role = 'super_admin' AND name IN ('Admin Yash', 'Dr. Rajesh Sharma (Dean)', 'Admin User'));",
     ]
     for stmt in migration_statements:
         try:
@@ -116,10 +118,15 @@ async def auto_seed_if_empty():
             cnt_res = await session.execute(select(func.count(User.id)))
             user_count = cnt_res.scalar_one()
             if user_count > 0:
+                # Also ensure super admin name is updated if already created
+                await session.execute(
+                    text("UPDATE users SET name = 'Dr. Rekha Narang' WHERE email = 'admin@geeta.edu.in' OR (role = 'super_admin' AND name IN ('Admin Yash', 'Dr. Rajesh Sharma (Dean)', 'Admin User'))")
+                )
+                await session.commit()
                 return
 
             admin = User(
-                name="Admin Yash", email="admin@geeta.edu.in",
+                name="Dr. Rekha Narang", email="admin@geeta.edu.in",
                 phone="+91 98765 43210", role=UserRole.super_admin,
                 password_hash=get_password_hash("admin123"), must_change_password=False
             )
