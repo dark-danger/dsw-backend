@@ -551,7 +551,15 @@ class DutyChartOut(BaseModel):
 # --- CORE COMMITTEE SCHEMAS ---
 class CommitteeRoleSchema(BaseModel):
     role_name: str
-    student_id: int
+    student_id: Optional[int] = None
+    student_name: Optional[str] = None
+    student_roll_no: Optional[str] = None
+    department: Optional[str] = None
+    semester: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    password: Optional[str] = None # Used only for President portal login provisioning
+    is_president: Optional[bool] = False
     responsibilities: Optional[str] = None
 
 class CoreCommitteeCreate(BaseModel):
@@ -584,14 +592,15 @@ class ClubMemberSchema(BaseModel):
     id: Optional[str] = None
     student_id: Optional[int] = None
     name: str
-    email: str
+    email: Optional[str] = None
     roll_number: Optional[str] = None
     branch: Optional[str] = None
     semester: Optional[str] = None
     phone: Optional[str] = None
     role: str
     is_core: Optional[bool] = True
-    password: Optional[str] = None
+    password: Optional[str] = None # Used only when provisioning President login account
+    has_portal_account: Optional[bool] = False
 
 class ClubCreate(BaseModel):
     name: str

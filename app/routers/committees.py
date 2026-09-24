@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -5,6 +6,7 @@ from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from app.database import get_db
 from app.core.deps import get_current_user, require_role
+from app.core.security import get_password_hash
 from app.models.all_models import User, UserRole, Event, CoreCommittee
 from app.schemas.schemas import CoreCommitteeCreate, CoreCommitteeOut
 from app.services.notification_service import create_notification, log_audit
@@ -32,33 +34,100 @@ async def create_core_committee(
     enriched_student_roles = []
     
     for item in payload.student_roles:
-        stu_res = await db.execute(select(User).where(User.id == item.student_id, User.role == UserRole.student))
-        student = stu_res.scalar_one_or_none()
-        
-        stu_name = student.name if student else "Unknown Student"
-        stu_roll = student.roll_number if student else "N/A"
-        stu_dept = student.department if student else "General"
-        stu_phone = student.phone if student else ""
+        is_president = (
+            (item.role_name and "president" in item.role_name.lower()) or 
+            bool(getattr(item, "is_president", False)) or 
+            bool(item.password and item.password.strip())
+        )
+
+        student_user = None
+
+        # If existing student_id passed, check database
+        if item.student_id:
+            stu_res = await db.execute(select(User).where(User.id == item.student_id))
+            student_user = stu_res.scalar_one_or_none()
+
+        clean_email = (item.email or "").strip().lower()
+        clean_roll = (item.student_roll_no or "").strip()
+
+        # ONLY For President: Provision or update Portal User Login Account
+        if is_president:
+            if not clean_email and not clean_roll:
+                clean_email = f"president_{uuid.uuid4().hex[:6]}@geeta.edu.in"
+
+            if not student_user and clean_email:
+                s_res = await db.execute(select(User).where(User.email == clean_email))
+                student_user = s_res.scalar_one_or_none()
+
+            if not student_user and clean_roll:
+                s_res2 = await db.execute(select(User).where(User.roll_number == clean_roll))
+                student_user = s_res2.scalar_one_or_none()
+
+            raw_password = (item.password or "President@123").strip()
+
+            if not student_user:
+                # Create President Login Account on Portal
+                student_user = User(
+                    name=(item.student_name or "Club President").strip(),
+                    email=clean_email,
+                    phone=item.phone,
+                    roll_number=item.student_roll_no,
+                    department=item.department,
+                    course_branch=item.department,
+                    year=item.semester,
+                    role=UserRole.student,
+                    password_hash=get_password_hash(raw_password),
+                    is_active=True,
+                    must_change_password=False
+                )
+                db.add(student_user)
+                await db.flush()
+            else:
+                # Update details if provided
+                if item.student_roll_no:
+                    student_user.roll_number = item.student_roll_no
+                if item.department:
+                    student_user.department = item.department
+                    student_user.course_branch = item.department
+                if item.semester:
+                    student_user.year = item.semester
+                if item.phone:
+                    student_user.phone = item.phone
+                if item.password and item.password.strip():
+                    student_user.password_hash = get_password_hash(item.password.strip())
+                await db.flush()
+
+        # For regular student roles: NO user login account is created, only details are saved
+        stu_name = item.student_name or (student_user.name if student_user else "Student Member")
+        stu_roll = item.student_roll_no or (student_user.roll_number if student_user else "N/A")
+        stu_dept = item.department or (student_user.course_branch or student_user.department if student_user else "General")
+        stu_sem = getattr(item, "semester", None) or (student_user.year if student_user else "")
+        stu_email = item.email or (student_user.email if student_user else "")
+        stu_phone = item.phone or (student_user.phone if student_user else "")
 
         enriched_item = {
             "role_name": item.role_name,
-            "student_id": item.student_id,
+            "student_id": student_user.id if student_user else None,
             "student_name": stu_name,
             "student_roll_no": stu_roll,
             "department": stu_dept,
+            "semester": stu_sem,
+            "email": stu_email,
             "phone": stu_phone,
+            "is_president": is_president,
+            "has_account": bool(student_user is not None),
             "responsibilities": item.responsibilities or ""
         }
         enriched_student_roles.append(enriched_item)
 
-        # Notify student about committee appointment
-        if student:
+        # Notify student if portal user account exists
+        if student_user:
             await create_notification(
                 db,
-                title=f"Appointed to Core Committee 🎉",
+                title="Appointed to Core Committee 🎉",
                 body=f"Congratulations! You have been appointed as '{item.role_name}' in the Core Committee for '{event.title}'.",
                 type="committee_appointment",
-                user_id=student.id,
+                user_id=student_user.id,
                 link="/student/committees"
             )
 

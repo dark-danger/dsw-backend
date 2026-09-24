@@ -253,7 +253,7 @@ async def delete_club(
     return {"message": "Club deleted successfully"}
 
 
-# 7. ADD STUDENT MEMBER & AUTO-PROVISION LOGIN (Admin or assigned Faculty Coordinator)
+# 7. ADD STUDENT MEMBER / APPOINT PRESIDENT (Admin or assigned Faculty Coordinator)
 @router.post("/{club_id}/members", response_model=ClubOut)
 async def add_club_member(
     club_id: int,
@@ -275,55 +275,76 @@ async def add_club_member(
     if current_user.role != UserRole.super_admin and club.faculty_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to manage members of this club")
 
-    # 1. Auto-provision or link Student Portal User account
-    clean_email = payload.email.strip().lower()
-    s_res = await db.execute(select(User).where(User.email == clean_email))
-    student_user = s_res.scalar_one_or_none()
+    is_president = (
+        (payload.role and payload.role.strip().lower() == "president") or 
+        bool(payload.password and payload.password.strip())
+    )
 
-    if not student_user and payload.roll_number:
-        clean_roll = payload.roll_number.strip()
+    clean_email = (payload.email or "").strip().lower()
+    clean_roll = (payload.roll_number or "").strip()
+
+    student_user = None
+
+    if clean_email:
+        s_res = await db.execute(select(User).where(User.email == clean_email))
+        student_user = s_res.scalar_one_or_none()
+
+    if not student_user and clean_roll:
         s_res2 = await db.execute(select(User).where(User.roll_number == clean_roll))
         student_user = s_res2.scalar_one_or_none()
 
-    raw_password = (payload.password or "President@123").strip()
-    if not student_user:
-        # Create student user account
-        student_user = User(
-            name=payload.name.strip(),
-            email=clean_email,
-            phone=payload.phone,
-            roll_number=payload.roll_number,
-            course_branch=payload.branch,
-            year=payload.semester,
-            role=UserRole.student,
-            password_hash=get_password_hash(raw_password),
-            is_active=True,
-            must_change_password=False
-        )
-        db.add(student_user)
-        await db.flush()
-    else:
-        # Update details if not present
-        if payload.roll_number and not student_user.roll_number:
-            student_user.roll_number = payload.roll_number
-        if payload.branch and not student_user.course_branch:
-            student_user.course_branch = payload.branch
-        if payload.semester and not student_user.year:
-            student_user.year = payload.semester
-        if payload.phone and not student_user.phone:
-            student_user.phone = payload.phone
-        if payload.password and payload.password.strip():
-            student_user.password_hash = get_password_hash(payload.password.strip())
+    # ONLY Create / Update Portal User Account IF it is a President
+    if is_president:
+        if not clean_email:
+            raise HTTPException(status_code=400, detail="President email address is required to create a portal login account.")
+            
+        raw_password = (payload.password or "President@123").strip()
+        if not student_user:
+            # Create student user account for President
+            student_user = User(
+                name=payload.name.strip(),
+                email=clean_email,
+                phone=payload.phone,
+                roll_number=payload.roll_number,
+                department=payload.branch,
+                course_branch=payload.branch,
+                year=payload.semester,
+                role=UserRole.student,
+                password_hash=get_password_hash(raw_password),
+                is_active=True,
+                must_change_password=False
+            )
+            db.add(student_user)
+            await db.flush()
+        else:
+            # Update details if provided
+            if payload.roll_number and not student_user.roll_number:
+                student_user.roll_number = payload.roll_number
+            if payload.branch:
+                student_user.course_branch = payload.branch
+                student_user.department = payload.branch
+            if payload.semester:
+                student_user.year = payload.semester
+            if payload.phone:
+                student_user.phone = payload.phone
+            if payload.password and payload.password.strip():
+                student_user.password_hash = get_password_hash(payload.password.strip())
+            await db.flush()
 
     # 2. Append to club student_members JSON
     members = list(club.student_members or [])
     new_mem = payload.model_dump()
     if not new_mem.get("id"):
         new_mem["id"] = f"mem_{uuid.uuid4().hex[:8]}"
-    new_mem["student_id"] = student_user.id
+    new_mem["student_id"] = student_user.id if student_user else None
+    new_mem["has_portal_account"] = bool(student_user is not None)
 
-    # Avoid duplicate additions of same student email in this club
-    members = [m for m in members if m.get("email", "").lower() != clean_email]
+    # Avoid duplicate additions of same student email / roll in this club
+    if clean_email:
+        members = [m for m in members if m.get("email", "").lower() != clean_email]
+    elif clean_roll:
+        members = [m for m in members if m.get("roll_number", "").strip() != clean_roll]
+
     members.append(new_mem)
     club.student_members = members
 
