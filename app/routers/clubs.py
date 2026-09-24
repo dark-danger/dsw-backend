@@ -125,12 +125,15 @@ async def get_club_leaderboard(
         members = c.student_members if isinstance(c.student_members, list) else []
         items.append({
             "club_id": c.id,
+            "id": c.id,
             "name": c.name,
             "category": c.category or "General",
+            "faculty_id": c.faculty_id,
             "faculty_name": c.faculty_coordinator.name if c.faculty_coordinator else "Unassigned",
             "total_points": c.total_points or 0,
             "tasks_completed": completed,
-            "member_count": len(members)
+            "member_count": len(members),
+            "total_members": len(members)
         })
 
     # Sort descending by total_points, tie-breaker tasks_completed

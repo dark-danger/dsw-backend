@@ -688,12 +688,15 @@ class ClubTaskOut(BaseModel):
 class ClubRankingOut(BaseModel):
     rank: int
     club_id: int
+    id: Optional[int] = None
     name: str
     category: str
+    faculty_id: Optional[int] = None
     faculty_name: Optional[str] = None
     total_points: int
     tasks_completed: int
     member_count: int
+    total_members: Optional[int] = None
 
 
 # --- OFFICIAL EVENT REPORT SCHEMAS ---
