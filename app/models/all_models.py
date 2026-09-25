@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Optional, List, Dict, Any
 from sqlalchemy import String, Integer, Boolean, Text, DateTime, ForeignKey, Enum, Float, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
@@ -229,18 +230,86 @@ class CoreCommittee(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
-    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), nullable=False)
-    event_date: Mapped[str] = mapped_column(String(50), nullable=True)
-    faculty_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False) # Faculty Mentor/In-charge
-    description: Mapped[str] = mapped_column(Text, nullable=True)
-    student_roles: Mapped[list] = mapped_column(JSON, nullable=False) # Array of { role_name, student_id, student_name, student_roll_no, department, phone, responsibilities }
+    category: Mapped[str] = mapped_column(String(100), default="General") # Discipline, Cultural, Technical, Logistics, Media & PR, Hospitality, Sports, General
+    event_id: Mapped[Optional[int]] = mapped_column(ForeignKey("events.id", ondelete="SET NULL"), nullable=True) # Optional linked event
+    event_date: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    faculty_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True) # Faculty Coordinator allotted by Admin
+    president_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True) # Optional President
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    student_roles: Mapped[list] = mapped_column(JSON, default=list) # Array of { role_name, student_id, student_name, student_roll_no, department, semester, email, phone, is_president, has_account, responsibilities, points }
+    total_points: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
     event = relationship("Event")
     faculty_mentor = relationship("User", foreign_keys=[faculty_id])
+    president = relationship("User", foreign_keys=[president_id])
     creator = relationship("User", foreign_keys=[created_by])
+    tasks = relationship("CommitteeTask", back_populates="committee", cascade="all, delete-orphan")
+    reports = relationship("CommitteeReport", back_populates="committee", cascade="all, delete-orphan")
+
+
+class CommitteeTask(Base):
+    __tablename__ = "committee_tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("core_committees.id", ondelete="CASCADE"), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    assigned_to: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True) # Specific student or None for all members
+    assigned_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False) # Admin or Faculty Coordinator
+    points_reward: Mapped[int] = mapped_column(Integer, default=20)
+    priority: Mapped[str] = mapped_column(String(30), default="medium") # low, medium, high, urgent
+    start_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    due_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="pending", index=True) # pending, in_progress, submitted, approved, declined
+    submission_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    file_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    file_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    submitted_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    review_remarks: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    committee = relationship("CoreCommittee", back_populates="tasks")
+    assignee = relationship("User", foreign_keys=[assigned_to])
+    assigner = relationship("User", foreign_keys=[assigned_by])
+    submitter = relationship("User", foreign_keys=[submitted_by])
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
+
+
+class CommitteeReport(Base):
+    __tablename__ = "committee_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    committee_id: Mapped[int] = mapped_column(ForeignKey("core_committees.id", ondelete="CASCADE"), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    report_type: Mapped[str] = mapped_column(String(50), default="activity_report") # activity_report, meeting_minutes, event_report, daily_log
+    report_date: Mapped[str] = mapped_column(String(30), nullable=False)
+    venue: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    attendees_count: Mapped[int] = mapped_column(Integer, default=0)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    achievements: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    challenges: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    next_steps: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    document_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    photos: Mapped[list] = mapped_column(JSON, default=list)
+    submitted_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="submitted") # draft, submitted, approved
+    faculty_remarks: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reviewed_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    committee = relationship("CoreCommittee", back_populates="reports")
+    submitter = relationship("User", foreign_keys=[submitted_by])
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
 
 
 # 6. DYNAMIC FORM MODELS (Google Sheets Sync)

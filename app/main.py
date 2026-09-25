@@ -144,6 +144,69 @@ async def apply_safe_migrations(conn):
         "ALTER TABLE daily_progress_reports ADD COLUMN IF NOT EXISTS drive_file_id VARCHAR(200);",
         "ALTER TABLE daily_progress_reports ADD COLUMN IF NOT EXISTS drive_file_url VARCHAR(500);",
         "ALTER TABLE daily_progress_reports ADD COLUMN IF NOT EXISTS drive_folder_url VARCHAR(500);",
+        # Core Committees Redesign Migrations
+        "ALTER TABLE core_committees ALTER COLUMN event_id DROP NOT NULL;",
+        "ALTER TABLE core_committees ALTER COLUMN faculty_id DROP NOT NULL;",
+        "ALTER TABLE core_committees ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'General';",
+        "ALTER TABLE core_committees ADD COLUMN IF NOT EXISTS president_id INTEGER REFERENCES users(id) ON DELETE SET NULL;",
+        "ALTER TABLE core_committees ADD COLUMN IF NOT EXISTS total_points INTEGER DEFAULT 0;",
+        "ALTER TABLE core_committees ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;",
+        "CREATE INDEX IF NOT EXISTS idx_core_comm_faculty_id ON core_committees (faculty_id);",
+        "CREATE INDEX IF NOT EXISTS idx_core_comm_president_id ON core_committees (president_id);",
+        """
+        CREATE TABLE IF NOT EXISTS committee_tasks (
+            id SERIAL PRIMARY KEY,
+            committee_id INTEGER NOT NULL REFERENCES core_committees(id) ON DELETE CASCADE,
+            title VARCHAR(200) NOT NULL,
+            description TEXT,
+            assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            assigned_by INTEGER NOT NULL REFERENCES users(id),
+            points_reward INTEGER DEFAULT 20,
+            priority VARCHAR(30) DEFAULT 'medium',
+            start_date TIMESTAMPTZ,
+            due_date TIMESTAMPTZ,
+            status VARCHAR(30) DEFAULT 'pending',
+            submission_text TEXT,
+            file_url TEXT,
+            file_name VARCHAR(255),
+            submitted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            submitted_at TIMESTAMPTZ,
+            reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            review_remarks TEXT,
+            reviewed_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_comm_tasks_comm_id ON committee_tasks (committee_id);",
+        "CREATE INDEX IF NOT EXISTS idx_comm_tasks_assigned_to ON committee_tasks (assigned_to);",
+        "CREATE INDEX IF NOT EXISTS idx_comm_tasks_status ON committee_tasks (status);",
+        """
+        CREATE TABLE IF NOT EXISTS committee_reports (
+            id SERIAL PRIMARY KEY,
+            committee_id INTEGER NOT NULL REFERENCES core_committees(id) ON DELETE CASCADE,
+            title VARCHAR(255) NOT NULL,
+            report_type VARCHAR(50) DEFAULT 'activity_report',
+            report_date VARCHAR(30) NOT NULL,
+            venue VARCHAR(200),
+            attendees_count INTEGER DEFAULT 0,
+            summary TEXT NOT NULL,
+            achievements TEXT,
+            challenges TEXT,
+            next_steps TEXT,
+            document_url TEXT,
+            photos JSONB DEFAULT '[]'::jsonb,
+            submitted_by INTEGER NOT NULL REFERENCES users(id),
+            status VARCHAR(30) DEFAULT 'submitted',
+            faculty_remarks TEXT,
+            reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            reviewed_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_comm_rep_comm_id ON committee_reports (committee_id);",
+        "CREATE INDEX IF NOT EXISTS idx_comm_rep_status ON committee_reports (status);",
         # Update super admin name to Dr. Rekha Narang
         "UPDATE users SET name = 'Dr. Rekha Narang' WHERE email = 'admin@geeta.edu.in' OR (role = 'super_admin' AND name IN ('Admin Yash', 'Dr. Rajesh Sharma (Dean)', 'Admin User'));",
 
@@ -162,9 +225,12 @@ async def auto_seed_if_empty():
             cnt_res = await session.execute(select(func.count(User.id)))
             user_count = cnt_res.scalar_one()
             if user_count > 0:
-                # Also ensure super admin name is updated if already created
+                # Also ensure super admin name is updated if already created and demo users are active
                 await session.execute(
                     text("UPDATE users SET name = 'Dr. Rekha Narang' WHERE email = 'admin@geeta.edu.in' OR (role = 'super_admin' AND name IN ('Admin Yash', 'Dr. Rajesh Sharma (Dean)', 'Admin User'))")
+                )
+                await session.execute(
+                    text("UPDATE users SET is_active = TRUE WHERE email IN ('admin@geeta.edu.in', 'faculty@geeta.edu.in', 'student@geeta.edu.in')")
                 )
                 await session.commit()
                 return

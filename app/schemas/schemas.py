@@ -558,34 +558,165 @@ class CommitteeRoleSchema(BaseModel):
     semester: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
-    password: Optional[str] = None # Used only for President portal login provisioning
+    password: Optional[str] = None # When provisioning student portal login account
     is_president: Optional[bool] = False
+    has_account: Optional[bool] = False
     responsibilities: Optional[str] = None
+    points: Optional[int] = 0
 
 class CoreCommitteeCreate(BaseModel):
     title: str
-    event_id: int
+    category: Optional[str] = "General"
+    event_id: Optional[int] = None
     event_date: Optional[str] = None
-    faculty_id: int
+    faculty_id: Optional[int] = None
+    president_id: Optional[int] = None
     description: Optional[str] = None
-    student_roles: List[CommitteeRoleSchema]
+    student_roles: List[CommitteeRoleSchema] = []
+
+class CoreCommitteeUpdate(BaseModel):
+    title: Optional[str] = None
+    category: Optional[str] = None
+    event_id: Optional[int] = None
+    event_date: Optional[str] = None
+    faculty_id: Optional[int] = None
+    president_id: Optional[int] = None
+    description: Optional[str] = None
+    student_roles: Optional[List[CommitteeRoleSchema]] = None
+    is_active: Optional[bool] = None
 
 class CoreCommitteeOut(BaseModel):
     id: int
     title: str
-    event_id: int
+    category: str = "General"
+    event_id: Optional[int] = None
     event_title: Optional[str] = None
     event_date: Optional[str] = None
-    faculty_id: int
+    faculty_id: Optional[int] = None
     faculty_name: Optional[str] = None
+    faculty_email: Optional[str] = None
+    faculty_phone: Optional[str] = None
+    president_id: Optional[int] = None
+    president_name: Optional[str] = None
+    president_email: Optional[str] = None
     description: Optional[str] = None
-    student_roles: List[Dict[str, Any]]
+    student_roles: List[Dict[str, Any]] = []
+    total_points: int = 0
+    tasks_count: int = 0
+    pending_tasks_count: int = 0
+    reports_count: int = 0
+    is_active: bool = True
     created_by: int
     creator_name: Optional[str] = None
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+# --- COMMITTEE TASK SCHEMAS ---
+class CommitteeTaskCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    assigned_to: Optional[int] = None # Specific student user id or None for all members
+    points_reward: Optional[int] = 20
+    priority: Optional[str] = "medium"
+    start_date: Optional[datetime] = None
+    due_date: Optional[datetime] = None
+
+class CommitteeTaskSubmit(BaseModel):
+    submission_text: str
+    file_url: Optional[str] = None
+    file_name: Optional[str] = None
+
+class CommitteeTaskReview(BaseModel):
+    status: str # "approved" or "declined"
+    review_remarks: Optional[str] = None
+    points_awarded: Optional[int] = None
+
+class CommitteeTaskOut(BaseModel):
+    id: int
+    committee_id: int
+    committee_title: Optional[str] = None
+    title: str
+    description: Optional[str] = None
+    assigned_to: Optional[int] = None
+    assignee_name: Optional[str] = None
+    assignee_roll: Optional[str] = None
+    assigned_by: int
+    assigner_name: Optional[str] = None
+    points_reward: int = 20
+    priority: str = "medium"
+    start_date: Optional[datetime] = None
+    due_date: Optional[datetime] = None
+    status: str = "pending"
+    submission_text: Optional[str] = None
+    file_url: Optional[str] = None
+    file_name: Optional[str] = None
+    submitted_by: Optional[int] = None
+    submitter_name: Optional[str] = None
+    submitted_at: Optional[datetime] = None
+    reviewed_by: Optional[int] = None
+    reviewer_name: Optional[str] = None
+    review_remarks: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# --- COMMITTEE REPORT SCHEMAS ---
+class CommitteeReportCreate(BaseModel):
+    title: str
+    report_type: Optional[str] = "activity_report" # activity_report, meeting_minutes, event_report, daily_log
+    report_date: str
+    venue: Optional[str] = None
+    attendees_count: Optional[int] = 0
+    summary: str
+    achievements: Optional[str] = None
+    challenges: Optional[str] = None
+    next_steps: Optional[str] = None
+    document_url: Optional[str] = None
+    photos: Optional[List[str]] = []
+
+class CommitteeReportOut(BaseModel):
+    id: int
+    committee_id: int
+    committee_title: Optional[str] = None
+    title: str
+    report_type: str = "activity_report"
+    report_date: str
+    venue: Optional[str] = None
+    attendees_count: int = 0
+    summary: str
+    achievements: Optional[str] = None
+    challenges: Optional[str] = None
+    next_steps: Optional[str] = None
+    document_url: Optional[str] = None
+    photos: List[str] = []
+    submitted_by: int
+    submitter_name: Optional[str] = None
+    status: str = "submitted"
+    faculty_remarks: Optional[str] = None
+    reviewed_by: Optional[int] = None
+    reviewer_name: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class CommitteeLeaderboardEntry(BaseModel):
+    student_id: Optional[int] = None
+    student_name: str
+    student_roll_no: Optional[str] = None
+    department: Optional[str] = None
+    role_name: str = "Member"
+    is_president: bool = False
+    total_points: int = 0
+    tasks_completed: int = 0
+    reports_submitted: int = 0
+    rank: int = 1
+
 
 # --- STUDENT CLUBS SCHEMAS ---
 class ClubMemberSchema(BaseModel):
