@@ -14,10 +14,12 @@ def _get_gemini_key() -> str:
     except Exception:
         return ""
 
+_DEFAULT_DB_URL = "postgresql+asyncpg://postgres.wdkglxguerkswgehuftf:Y1a2s3h4%409211067540@aws-0-ap-south-1.pooler.supabase.com:6543/postgres"
+
 class Settings(BaseSettings):
     PROJECT_NAME: str = "DSW Geeta University Portal API"
     ENV: str = "development"
-    DATABASE_URL: str = os.getenv("DATABASE_URL") or os.getenv("SUPABASE_URL", "")
+    DATABASE_URL: str = os.getenv("DATABASE_URL") or os.getenv("SUPABASE_URL") or _DEFAULT_DB_URL
     JWT_SECRET: str = "geeta-university-dsw-super-secret-key-2026"
     JWT_REFRESH_SECRET: str = "geeta-university-dsw-refresh-secret-key-2026"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
