@@ -276,11 +276,36 @@ async def profiling_and_timing_middleware(request: Request, call_next):
     _query_time_ctx.set(0.0)
     start_time = time.perf_counter()
 
-    # Preflight requests and lightweight health/docs routes bypass DB initialization for maximum speed
-    if request.method == "OPTIONS" or request.url.path in ["/", "/health", "/api/keep-warm", "/docs", "/openapi.json"]:
-        response = await call_next(request)
+    # Preflight OPTIONS requests return immediately with wide-open CORS headers
+    if request.method == "OPTIONS":
+        return JSONResponse(
+            status_code=200,
+            content={"status": "ok"},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Max-Age": "86400",
+            }
+        )
+
+    # Lightweight health/docs routes bypass DB initialization for maximum speed
+    if request.url.path in ["/", "/health", "/api/keep-warm", "/docs", "/openapi.json"]:
+        try:
+            response = await call_next(request)
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={"detail": str(e), "error_type": type(e).__name__},
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "*",
+                    "Access-Control-Allow-Headers": "*"
+                }
+            )
         process_time = (time.perf_counter() - start_time) * 1000
         response.headers["X-Process-Time"] = f"{process_time:.2f}ms"
+        response.headers["Access-Control-Allow-Origin"] = "*"
         return response
         
     global _db_initialized
@@ -288,12 +313,31 @@ async def profiling_and_timing_middleware(request: Request, call_next):
         try:
             await ensure_db_initialized()
         except Exception as e:
+            print(f"[DB Init Error] {e}")
             return JSONResponse(
                 status_code=500,
-                content={"detail": str(e), "error_type": "DatabaseConfigurationError"},
-                headers={"Access-Control-Allow-Origin": "*"}
+                content={"detail": f"Database initialization failed: {str(e)}", "error_type": "DatabaseConfigurationError"},
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "*",
+                    "Access-Control-Allow-Headers": "*"
+                }
             )
-    response = await call_next(request)
+
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        print(f"[Unhandled Exception] {request.method} {request.url.path} -> {exc}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": str(exc), "error_type": type(exc).__name__},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "*",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
+
     total_time_ms = (time.perf_counter() - start_time) * 1000
     db_count = _query_count_ctx.get()
     db_time_ms = _query_time_ctx.get() * 1000
@@ -301,6 +345,7 @@ async def profiling_and_timing_middleware(request: Request, call_next):
     response.headers["X-Process-Time"] = f"{total_time_ms:.2f}ms"
     response.headers["X-DB-Queries"] = str(db_count)
     response.headers["X-DB-Time"] = f"{db_time_ms:.2f}ms"
+    response.headers["Access-Control-Allow-Origin"] = "*"
 
     # Log query execution time & counts for instant N+1 / slow route visibility
     print(f"[API Profiler] {request.method} {request.url.path} -> {response.status_code} ({total_time_ms:.1f}ms total | {db_count} DB queries in {db_time_ms:.1f}ms)")
@@ -312,7 +357,11 @@ async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"detail": str(exc), "error_type": type(exc).__name__},
-        headers={"Access-Control-Allow-Origin": "*"}
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*"
+        }
     )
 
 

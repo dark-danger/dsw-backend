@@ -5,7 +5,6 @@ from sqlalchemy import select, func, and_, desc
 from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
-import pytz
 
 from app.database import get_db
 from app.core.deps import get_current_user, require_role
@@ -27,8 +26,8 @@ from app.routers.tasks import build_task_out
 
 router = APIRouter(prefix="/api/dpr", tags=["Daily Progress Report (DPR)"])
 
-# IST timezone for India / Geeta University
-IST = pytz.timezone("Asia/Kolkata") if "Asia/Kolkata" in pytz.all_timezones else timezone.utc
+# IST timezone for India / Geeta University (UTC + 5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
 
 def get_today_date_str() -> str:
     now_ist = datetime.now(timezone.utc).astimezone(IST)
