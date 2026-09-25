@@ -590,4 +590,55 @@ class EmailConnection(Base):
     user = relationship("User", backref="email_connection")
 
 
+# 16. DAILY PROGRESS REPORT (DPR) MODELS
+class DailyProgressReport(Base):
+    __tablename__ = "daily_progress_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    report_date: Mapped[str] = mapped_column(String(20), nullable=False, index=True) # YYYY-MM-DD
+    total_hours: Mapped[float] = mapped_column(Float, default=0.0)
+    summary: Mapped[str] = mapped_column(Text, nullable=True)
+    challenges: Mapped[str] = mapped_column(Text, nullable=True)
+    plan_for_tomorrow: Mapped[str] = mapped_column(Text, nullable=True)
+    other_tasks: Mapped[list] = mapped_column(JSON, default=list) # Array of { title, description, hours_spent, status }
+    status: Mapped[str] = mapped_column(String(30), default="submitted", index=True) # draft, submitted, acknowledged
+    admin_remarks: Mapped[str] = mapped_column(Text, nullable=True)
+    acknowledged_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    acknowledged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Document & Google Drive Archive Details
+    document_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    drive_file_id: Mapped[str] = mapped_column(String(200), nullable=True)
+    drive_file_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    drive_folder_url: Mapped[str] = mapped_column(String(500), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    user = relationship("User", foreign_keys=[user_id])
+    acknowledger = relationship("User", foreign_keys=[acknowledged_by])
+    task_updates = relationship("DPRTaskUpdate", back_populates="report", cascade="all, delete-orphan")
+
+
+
+class DPRTaskUpdate(Base):
+    __tablename__ = "dpr_task_updates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    dpr_id: Mapped[int] = mapped_column(ForeignKey("daily_progress_reports.id", ondelete="CASCADE"), nullable=False, index=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    task_title: Mapped[str] = mapped_column(String(255), nullable=False)
+    today_work_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    status_update: Mapped[str] = mapped_column(String(50), default="in_progress") # completed, in_progress, blocked, no_activity
+    progress_percentage: Mapped[int] = mapped_column(Integer, default=0) # 0 - 100
+    hours_spent: Mapped[float] = mapped_column(Float, default=0.0)
+    remarks: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    report = relationship("DailyProgressReport", back_populates="task_updates")
+    task = relationship("Task", foreign_keys=[task_id])
+
+
+
 

@@ -13,7 +13,7 @@ from app.core.security import get_password_hash
 from app.database import AsyncSessionLocal, Base, engine
 from app.models.all_models import User, UserRole
 from app.routers import (
-    ai, announcements, auth, clubs, committees, dashboard, duty_charts,
+    ai, announcements, auth, clubs, committees, dashboard, dpr, duty_charts,
     email, event_reports, events, feedback, forms, leaderboard_staff, leaderboard_student,
     notifications, queries, tasks, uploads, users,
 )
@@ -101,8 +101,52 @@ async def apply_safe_migrations(conn):
         "CREATE INDEX IF NOT EXISTS idx_clubs_faculty_id ON clubs (faculty_id);",
         "CREATE INDEX IF NOT EXISTS idx_club_tasks_club_id ON club_tasks (club_id);",
         "CREATE INDEX IF NOT EXISTS idx_club_tasks_status ON club_tasks (status);",
+        # Daily Progress Reports table
+        """
+        CREATE TABLE IF NOT EXISTS daily_progress_reports (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            report_date VARCHAR(20) NOT NULL,
+            total_hours DOUBLE PRECISION DEFAULT 0.0,
+            summary TEXT,
+            challenges TEXT,
+            plan_for_tomorrow TEXT,
+            other_tasks JSONB DEFAULT '[]'::jsonb,
+            status VARCHAR(30) DEFAULT 'submitted',
+            admin_remarks TEXT,
+            acknowledged_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            acknowledged_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_dpr_user_id ON daily_progress_reports (user_id);",
+        "CREATE INDEX IF NOT EXISTS idx_dpr_report_date ON daily_progress_reports (report_date);",
+        "CREATE INDEX IF NOT EXISTS idx_dpr_status ON daily_progress_reports (status);",
+        "CREATE INDEX IF NOT EXISTS idx_dpr_created_at ON daily_progress_reports (created_at DESC);",
+        # DPR Task Updates table
+        """
+        CREATE TABLE IF NOT EXISTS dpr_task_updates (
+            id SERIAL PRIMARY KEY,
+            dpr_id INTEGER NOT NULL REFERENCES daily_progress_reports(id) ON DELETE CASCADE,
+            task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+            task_title VARCHAR(255) NOT NULL,
+            today_work_summary TEXT NOT NULL,
+            status_update VARCHAR(50) DEFAULT 'in_progress',
+            progress_percentage INTEGER DEFAULT 0,
+            hours_spent DOUBLE PRECISION DEFAULT 0.0,
+            remarks TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_dpr_tu_dpr_id ON dpr_task_updates (dpr_id);",
+        "ALTER TABLE daily_progress_reports ADD COLUMN IF NOT EXISTS document_url VARCHAR(500);",
+        "ALTER TABLE daily_progress_reports ADD COLUMN IF NOT EXISTS drive_file_id VARCHAR(200);",
+        "ALTER TABLE daily_progress_reports ADD COLUMN IF NOT EXISTS drive_file_url VARCHAR(500);",
+        "ALTER TABLE daily_progress_reports ADD COLUMN IF NOT EXISTS drive_folder_url VARCHAR(500);",
         # Update super admin name to Dr. Rekha Narang
         "UPDATE users SET name = 'Dr. Rekha Narang' WHERE email = 'admin@geeta.edu.in' OR (role = 'super_admin' AND name IN ('Admin Yash', 'Dr. Rajesh Sharma (Dean)', 'Admin User'));",
+
     ]
     for stmt in migration_statements:
         try:
@@ -292,6 +336,7 @@ app.include_router(committees.router)
 app.include_router(clubs.router)
 app.include_router(ai.router)
 app.include_router(email.router)
+app.include_router(dpr.router)
 
 # Mount static uploads directory for direct access to uploaded images/proofs
 if os.path.exists(settings.UPLOAD_DIR):

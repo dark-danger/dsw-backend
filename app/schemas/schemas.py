@@ -884,3 +884,119 @@ class EventReportOut(BaseModel):
         from_attributes = True
 
 
+# --- DPR (DAILY PROGRESS REPORT) SCHEMAS ---
+class DPRTaskUpdateItem(BaseModel):
+    task_id: int
+    task_title: str
+    today_work_summary: str
+    status_update: str = "in_progress" # completed, in_progress, blocked, no_activity
+    progress_percentage: int = 0
+    hours_spent: float = 0.0
+    remarks: Optional[str] = None
+
+
+class OtherTaskItem(BaseModel):
+    title: str
+    description: str
+    hours_spent: float = 0.0
+    status: str = "completed"
+
+
+class DPRCreateRequest(BaseModel):
+    report_date: Optional[str] = None # YYYY-MM-DD
+    total_hours: float = 0.0
+    summary: Optional[str] = None
+    challenges: Optional[str] = None
+    plan_for_tomorrow: Optional[str] = None
+    task_updates: List[DPRTaskUpdateItem] = []
+    other_tasks: List[OtherTaskItem] = []
+
+
+class DPRAcknowledgeRequest(BaseModel):
+    admin_remarks: Optional[str] = None
+    status: Optional[str] = "acknowledged"
+
+
+class DPRTaskUpdateOut(BaseModel):
+    id: int
+    task_id: int
+    task_title: str
+    today_work_summary: str
+    status_update: str
+    progress_percentage: int
+    hours_spent: float
+    remarks: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class DPROut(BaseModel):
+    id: int
+    user_id: int
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    user_department: Optional[str] = None
+    user_designation: Optional[str] = None
+    user_employee_id: Optional[str] = None
+    user_role: Optional[str] = None
+    report_date: str
+    total_hours: float
+    summary: Optional[str] = None
+    challenges: Optional[str] = None
+    plan_for_tomorrow: Optional[str] = None
+    other_tasks: List[Dict[str, Any]] = []
+    task_updates: List[DPRTaskUpdateOut] = []
+    status: str
+    admin_remarks: Optional[str] = None
+    acknowledged_by: Optional[int] = None
+    acknowledged_by_name: Optional[str] = None
+    acknowledged_at: Optional[datetime] = None
+    document_url: Optional[str] = None
+    drive_file_id: Optional[str] = None
+    drive_file_url: Optional[str] = None
+    drive_folder_url: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+
+class DPRTodayStatusOut(BaseModel):
+    is_submitted: bool
+    report_id: Optional[int] = None
+    report_date: str
+    submitted_at: Optional[datetime] = None
+    assigned_tasks_count: int = 0
+    pending_tasks_count: int = 0
+    streak_count: int = 0
+    dpr: Optional[DPROut] = None
+
+
+class MissingEmployeeOut(BaseModel):
+    id: int
+    name: str
+    email: str
+    department: Optional[str] = None
+    designation: Optional[str] = None
+    employee_id: Optional[str] = None
+    role: str
+    active_tasks_count: int = 0
+    last_dpr_date: Optional[str] = None
+
+
+class DPRAdminOverviewOut(BaseModel):
+    date: str
+    total_employees: int
+    submitted_count: int
+    pending_count: int
+    submission_rate_percentage: float
+    total_hours_logged: float
+    missing_employees: List[MissingEmployeeOut] = []
+    submissions: List[DPROut] = []
+
+
+
